@@ -19,6 +19,7 @@
   "scripts": {
     "build": "pnpm run clean && tsc -p tsconfig.build.json && vite build",
     "clean": "rimraf dist coverage",
+    "glyphs:extract": "node scripts/extract-glyphs.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"

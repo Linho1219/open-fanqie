@@ -26,3 +26,12 @@ pnpm test
 pnpm build
 ```
 
+谱面中的固定符号来自原渲染 API 的 SVG 路径，保存在
+`src/assets/glyphs.json`，渲染时仍按需写入每页的 `defs`。标题、作者、歌词与用户注释
+保留为文本；数字、小节线、倚音、力度和装饰记号等不依赖客户端字体。
+
+原 API 可用时，可以重新提取并校验字形库：
+
+```bash
+pnpm glyphs:extract
+```

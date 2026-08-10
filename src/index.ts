@@ -1,4 +1,6 @@
 export { parse } from "./parser";
+export { render } from "./renderer";
+export { DEFAULT_PAGE_CONFIG } from "./config";
 export type {
   Accidental,
   BarlineElement,
@@ -6,6 +8,7 @@ export type {
   BeatBoundaryElement,
   Diagnostic,
   InlineLayerElement,
+  LegacyPageConfig,
   LyricLine,
   LyricSyllable,
   Mark,
@@ -13,7 +16,10 @@ export type {
   Meter,
   MusicElement,
   NoteElement,
+  NumberStyle,
   Ornament,
+  PagePreset,
+  RenderOptions,
   ScoreDocument,
   ScoreLine,
   ScorePage,

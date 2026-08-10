@@ -156,3 +156,35 @@ export interface ScoreDocument {
   diagnostics: Diagnostic[];
 }
 
+export type PagePreset = "A4" | "A5" | "A4_horizontal" | "A5_horizontal";
+export type FontFamily = "Microsoft YaHei" | "SimSun" | "SimHei" | "KaiTi";
+export type NumberStyle = "a" | "b" | "c";
+
+export interface LegacyPageConfig {
+  page: PagePreset;
+  margin_top: string | number;
+  margin_bottom: string | number;
+  margin_left: string | number;
+  margin_right: string | number;
+  biaoti_font: FontFamily;
+  shuzi_font: NumberStyle;
+  geci_font: FontFamily;
+  height_quci: string | number;
+  height_cici: string | number;
+  height_ciqu: string | number;
+  height_shengbu: string | number;
+  biaoti_size: string | number;
+  fubiaoti_size: string | number;
+  geci_size: string | number;
+  body_margin_top: string | number;
+  lianyinxian_type: "0" | "1" | "2" | 0 | 1 | 2;
+  heights?: Record<string, [string | number, string | number, string | number, string | number, string | number]>;
+}
+
+export interface RenderOptions {
+  pageConfig?: string | Partial<LegacyPageConfig> | null;
+  customCode?: string | null;
+  pageNum?: number;
+  onDiagnostics?: (diagnostics: readonly Diagnostic[]) => void;
+}
+
