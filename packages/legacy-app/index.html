@@ -1,0 +1,239 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>番茄简谱V1.0 beta1</title>
+<link href="/Public/zhipuStyle/default/main.css" rel="stylesheet" type="text/css" />
+<script>
+	//if(!window.applicationCache) {
+	//	window.location='./Zhipu-nohtml5-example-0.html';
+	//}
+	var urlExampleId=0;
+</script>
+<script src="/Public/js/jquery.min.js"></script>
+<!--
+<script src="/Public/js/vconsole.min.js"></script>
+<script type="text/javascript">new window.VConsole();</script>
+-->
+
+<script>
+  window.openFanqieRendererReady = new Promise(function (resolve) {
+    window.resolveOpenFanqieRenderer = resolve;
+  });
+</script>
+<script type="module" src="/src/main.ts"></script>
+<script src="/Zhipu-jsCode.js"></script>
+	<script>var isWindows = false;</script></head>
+<body>
+<div id="debugDiv"></div>
+<div class="win">
+	<div class="titleBar">
+    	<span></span>
+        <i onClick="winClose()" title="关闭"></i>
+    </div>
+    <div class="body"></div>
+</div>
+<div class="mask"></div>
+
+<div id="tip">提示</div>
+<div id="addCustomTip">提示：请在需要插入内容的地方点击鼠标左键即可。</div>
+<div id="customAttribute">
+	<div class="heads"></div>
+    <div class="mains">
+		<div class="attributes attributes_text">
+    <table border="0">
+      <tr>
+        <td height="25">
+        <select id="custom_text_family">
+          <option value="Microsoft YaHei">微软雅黑</option>
+          <option value="SimSun">宋体</option>
+          <option value="SimHei">黑体</option>
+          <option value="KaiTi">楷体</option>
+        </select>
+          <select id="custom_text_size">
+            <option value="12">12</option>
+            <option value="14">14</option>
+            <option value="16">16</option>
+            <option value="18">18</option>
+            <option value="24">24</option>
+            <option value="28">28</option>
+            <option value="32">32</option>
+            <option value="38">38</option>
+            <option value="52">52</option>
+            <option value="60">60</option>
+        </select>
+          <select id="custom_text_color">
+            <option value="#101010" style="color:#101010;">黑色</option>
+            <option value="#ff0000" style="color:#ff0000;">红色</option>
+            <option value="#ff9900" style="color:#ff9900">橙色</option>
+            <option value="#00cc00" style="color:#00cc00;">绿色</option>
+            <option value="#0000cc" style="color:#0000cc;">蓝色</option>
+            <option value="#ff00ff" style="color:#ff00ff;">粉色</option>
+            <option value="#ffff00" style="color:#ffff00">黄色</option>   
+        </select>
+          <select id="custom_text_weight">
+            <option value="normal">不加粗</option>
+            <option value="bold">加粗</option>
+        </select></td>
+      </tr>
+      <tr>
+        <td height="25">
+        <textarea id="custom_text_text" onkeydown="nobr(event)" style=" width:98%; height:35px; padding-left:1px;"></textarea>
+        </td>
+      </tr>
+      </table>
+</div>
+
+<div class="attributes attributes_symbol">
+    <table border="0" style="color:#333;">
+      <tr>
+        <td height="25">
+        颜色：<select id="custom_symbol_fill">
+            <option value="#101010" style="color:#101010;">黑色</option>
+            <option value="#ff0000" style="color:#ff0000;">红色</option>
+            <option value="#ff9900" style="color:#ff9900">橙色</option>
+            <option value="#00cc00" style="color:#00cc00;">绿色</option>
+            <option value="#0000cc" style="color:#0000cc;">蓝色</option>
+            <option value="#ff00ff" style="color:#ff00ff;">粉色</option>
+            <option value="#ffff00" style="color:#ffff00">黄色</option>
+        </select>&nbsp;
+        	缩放：宽度 <input id="custom_symbol_width" type="text" value="1" style="width:25px;"/> &nbsp;
+        	高度 <input id="custom_symbol_height" type="text" value="1" style="width:25px;"/>
+        </td>
+      </tr>
+      </table>
+</div>
+    <table border="0" style="border-top:1px #CCCCCC dashed; width:100%; margin-top:5px;">
+      <tr>
+        <td height="25" style="padding-top:5px;"><input type="button" onClick="removeCustom();" value="删除此元素"></td>
+      </tr>
+    </table>
+    </div>
+</div>
+
+
+<div id="filename">未命名.jps</div>
+
+
+
+<div class="head"><div class="main">
+<a href="http://www.jianpu99.net/" target="_blank"><img class="logo" src="/Public/zhipuStyle/default/images/logo.png"/></a><ul class="menu" onmousedown="noHideMenu();">
+    	<li>
+        	<span id="menuFile" onClick="showMenu(this)">文件(F)</span>
+        	<ul>
+            	<li id="menuNewFile" onClick="showWin('新建','./Zhipu-newFile.html');"><i>Ctrl+N</i>新建...</li>
+            	<li id="menuOpenFile" onClick="showWin('打开','./Zhipu-fileBrowsing-type-open.html');"><i>Ctrl+O</i>打开...</li>
+            	<li id="menuSave" onClick="toSave();"><i>Ctrl+S</i>保存</li>
+            	<li id="menuSaveAs" onClick="showWin('另存为','./Zhipu-fileBrowsing-type-save.html');"><i>Shift+Ctrl+S</i>另存为...</li>
+            	<li class="line"></li>
+            	<li onClick="showWin('系统示例文档','./Zhipu-exampleList.html');">从示例谱库中打开...</li>                
+            	<li class="line"></li>                
+            	<li onClick="showWin('页面设置','./Zhipu-pageConfig.html');">页面设置...</li>
+            	<li class="line"></li>
+            	<li onClick="showWin('导出PDF文档','./Zhipu-toPdf.html');">导出PDF文档...</li>
+            	<li onClick="showWin('导出JPG图片','./Zhipu-toJpg.html');">导出JPG图片...</li>
+            	<li onClick="toSvg();">导出SVG图片...</li>
+            	<li class="line"></li>
+            	<li onClick="toClose()">关闭</li>
+            </ul>
+        </li>
+        
+    	<li>
+        	<span id="tryUser" onClick="showMenu(this)">视图(V)</span>
+        	<ul>
+            	<li id="menuSetView1" onClick="setView(1)">编码</li>
+            	<li id="menuSetView3" onClick="setView(3)">拆分</li>
+            	<li id="menuSetView2" onClick="setView(2)"><i>Tab</i>预览</li>
+                <li class="line"></li>
+            		<li id="menuFullscreen" onClick="toFullscreen();"><i>F11</i>全屏</li>            </ul>
+        </li>
+		
+    	<li>
+        	<span onClick="showMenu(this)">插入(I)</span>
+        	<ul>
+            	<li onClick="showWin('插入文字','./Zhipu-addCustomText.html');">自定义文字</li>
+            	<li onClick="showWin('插入符号','./Zhipu-addCustomSymbol.html');">符号大全</li>
+            	<li class="line"></li>
+            	<li id="menuAddLastSymbol" onClick="addSymbol(lastAddSymbol);"><i>Ctrl+E</i>插入最后使用的符号</li>
+            </ul>
+        </li>
+    	<li>
+        	<span id="tryUser" onClick="showMenu(this)">功能(T)</span>
+        	<ul>
+            	<li id="menuPlayer" onClick="showWin('听音查错','./Zhipu-player.html');"><i>Ctrl+Q</i>试听查错</li>
+            </ul>
+        </li>
+        
+    	<li class="userMenu">
+        	<span id="menuUser" onClick="showMenu(this)">用户(U)</span>
+        	<ul>
+            	<li onClick="showWin('修改我的登录密码','./Zhipu-newPassword.html');">修改登录密码</li>
+            	<li onClick="postwin.location='./Zhipu-qiut.html'">退出登录</li>
+            </ul>
+        </li>        
+            	
+    	<li>
+        	<span id="menuHelp" onClick="showMenu(this)">帮助(H)</span>
+        	<ul>
+            						<li onClick="window.open('http://doc.lezhi99.com/fanqie');hideMenu();">软件帮助</li>
+					<li onClick="window.open('http://doc.lezhi99.com/zhipu');hideMenu();">脚本说明手册</li>
+            	
+            	<li id="menuSymbol" onClick="showWin('常用符号表，此界面可用“Ctrl+~”快捷键呼出，ESC键可关闭此界面。','./Zhipu-helpSymbol.html');"><i>Ctrl+~</i>常用符号表</li>
+            	<li onClick="showWin('关于本软件','./Zhipu-about.html');">关于本软件</li>
+            </ul>
+        </li>
+    	<li>
+            						<span style="color:#fff000;font-weight:bold;" onClick="window.open('/Public/donate/');">捐赠(D)</span>        </li>
+    </ul>
+    <div class="userInfo">	当前用户：未登陆 <span class="but" onClick="showWin('用户登陆','/Zhipu-login');" style="color:#fff000">立刻登录</span>
+    <input type="hidden" value="0" id="uid">
+    <script>$(".userMenu").hide();</script></div>
+</div></div>
+<div class="preview">
+	<div class="svgList">
+		<div id="playerLine"></div>
+		<div id="cursor"></div>
+    </div>
+</div>
+
+<div class="editor">
+    <div class="line"><div class="main"></div></div>
+    <div class="body">
+		<iframe id="editFrame" name="editFrame" src="./Zhipu-editor.html" style="width:100%; height:100%; border:0;"></iframe>
+    </div>
+</div>
+
+<div class="foot">
+    <div class="main">
+        <ul class="viewBut">
+            <li class="viewBut1" onClick="setView(1)">脚本</li>
+            <li class="viewBut3 current" onClick="setView(3)">拆分</li>
+            <li class="viewBut2" onClick="setView(2)">预览</li>
+        </ul>
+        <div class="softInfo">
+			番茄制谱QQ群：371552722，欢迎加入！
+        	<label style="margin-right:5px;"><input type="checkbox" id="jpFormat" onChange="setJpFormat();" style="vertical-align:-3px;">自动格式化脚本</label>
+        	<label><input type="checkbox" id="lockCustom" style="vertical-align:-3px;" onChange="setLockCustom();" checked>锁定自定义元素</label>
+      </div>
+    </div>
+</div>
+
+<div style=" height:0; width:0;">
+<iframe name="postwin" id="postwin" style="border:0; width:5px; height:5px; "></iframe>
+
+<form id="postForm" name="postForm"> <textarea id="postContent" name="postContent"></textarea> </form>
+<textarea name="customCode"></textarea>
+<textarea name="pageConfig"></textarea>
+
+<object classid="clsid:D27CDB6E-AE6D-11cf-96B8-444553540000" codebase="http://download.macromedia.com/pub/shockwave/cabs/flash/swflash.cab#version=7,0,19,0" width="1" height="1" id="Fplay" title="Fplay" align="middle">
+<param name="allowScriptAccess" value="always" />
+<param name="movie" value="/Public/js/player.swf">
+<param name="quality" value="high">
+<param name="wmode" value="transparent" />
+<embed src="/Public/js/player.swf" name="Fplay" quality="high" allowScriptAccess="always"  swLiveConnect="true" pluginspage="http://www.macromedia.com/go/getflashplayer" type="application/x-shockwave-flash"  width="1" height="1"></embed>
+</object>
+
+
+</div>
+</body>
+</html>

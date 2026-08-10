@@ -1,0 +1,75 @@
+<div style="height: 357px; padding-left: 6px">
+  <div class="fileBrow fileList" style="width: 600px">
+    <div class="item">
+      <ul>
+        <li class="fileName">文件名称</li>
+        <li class="laseEdit" style="width: 197px">作者</li>
+        <li>文件大小</li>
+      </ul>
+    </div>
+    <div class="list">
+      <ul>
+        <li id="file_43" data-id="43">
+          <span class="icon select"></span>
+          <span class="name select">﻿排排坐（极简示例）.jps</span>
+          <span class="lastEdit" style="width: 100px">0.37KB</span>
+          <span class="lastEdit">佚名词曲</span>
+        </li>
+        <li id="file_37" data-id="37">
+          <span class="icon select"></span>
+          <span class="name select">快乐父子俩.jps</span>
+          <span class="lastEdit" style="width: 100px">0.95KB</span>
+          <span class="lastEdit">邱悦曲</span>
+        </li>
+        <li id="file_110760" data-id="110760">
+          <span class="icon select"></span>
+          <span class="name select">时间都去哪了.jps</span>
+          <span class="lastEdit" style="width: 100px">1.15KB</span>
+          <span class="lastEdit">陈曦词；董冬冬曲；</span>
+        </li>
+        <li id="file_63" data-id="63">
+          <span class="icon select"></span>
+          <span class="name select">同一首歌（合唱）.jps</span>
+          <span class="lastEdit" style="width: 100px">2.19KB</span>
+          <span class="lastEdit">陈哲、胡迎节词；孟卫…</span>
+        </li>
+        <li id="file_61" data-id="61">
+          <span class="icon select"></span>
+          <span class="name select">太阳出来喜洋洋（混声合唱）.jps</span>
+          <span class="lastEdit" style="width: 100px">6.07KB</span>
+          <span class="lastEdit">杨鸿年、黎英海改编；</span>
+        </li>
+      </ul>
+    </div>
+    <div
+      class="fileInfo"
+      style="float: left; width: 585px; margin: 10px 5px 0 5px"
+    >
+      当前选中：<span class="filename"></span>
+      <input
+        style="float: right; margin-left: 5px"
+        type="button"
+        onclick="winClose();"
+        value="取消"
+      />
+      <input
+        style="float: right"
+        type="button"
+        onclick="openExampleFile();"
+        value="打开"
+      />
+    </div>
+  </div>
+</div>
+
+<script>
+  $(".fileList .list ul li .select")
+    .bind("mousedown", function (event) {
+      exampleFileId = $(this).parent().attr("data-id");
+      selectFile(exampleFileId);
+    })
+    .dblclick(function () {
+      //双击事件
+      openExampleFile();
+    });
+</script>

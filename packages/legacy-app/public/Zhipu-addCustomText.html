@@ -1,0 +1,48 @@
+<table width="500" border="1" style="margin:10px;">
+  <tr>
+    <td height="25"><select id="custom_family">
+          <option value="Microsoft YaHei">微软雅黑</option>
+          <option value="SimSun">宋体</option>
+          <option value="SimHei">黑体</option>
+          <option value="KaiTi">楷体</option>
+    </select>
+      <select id="custom_size">
+        <option value="12">12</option>
+        <option value="14">14</option>
+        <option value="16" selected>16</option>
+        <option value="18">18</option>
+        <option value="24">24</option>
+        <option value="28">28</option>
+        <option value="32">32</option>
+        <option value="38">38</option>
+        <option value="52">52</option>
+        <option value="60">60</option>
+    </select>
+      <select id="custom_color">
+        <option value="#101010" style="color:#101010;" selected>黑色</option>
+        <option value="#ff0000" style="color:#ff0000;">红色</option>
+        <option value="#ff9900" style="color:#ff9900">橙色</option>
+        <option value="#00cc00" style="color:#00cc00;">绿色</option>
+        <option value="#0000cc" style="color:#0000cc;">蓝色</option>
+        <option value="#ff00ff" style="color:#ff00ff;">粉色</option>
+        <option value="#ffff00" style="color:#ffff00">黄色</option>
+    </select>
+      <select id="custom_weight">
+        <option value="normal" selected>不加粗</option>
+        <option value="bold">加粗</option>
+    </select></td>
+  </tr>
+  <tr>
+    <td height="25"><input type="text" id="custom_text" size="22" style=" width:100%;" onkeydown="if(event.keyCode==13){ addText(); return false; }"></td>
+  </tr>
+  <tr>
+    <td height="25">
+    <input name="button" type="submit" id="submit" onClick="addText();" value="确定">
+      &nbsp;
+    <input type="button" name="button2" id="button2" onClick="winClose();" value="取消"></td>
+  </tr>
+</table>
+
+<script>
+setTimeout(function(){ $("#custom_text").focus(); },300);
+</script>

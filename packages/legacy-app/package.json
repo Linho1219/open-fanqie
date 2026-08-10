@@ -1,0 +1,19 @@
+{
+  "name": "@openfanqie/legacy-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "clean": "rimraf dist",
+    "dev": "vite",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@openfanqie/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

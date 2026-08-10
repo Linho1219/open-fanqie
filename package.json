@@ -1,39 +1,13 @@
 {
-  "name": "open-fanqie-core",
-  "version": "0.1.0",
-  "description": "A TypeScript renderer for the Fanqie numbered-notation DSL",
-  "type": "module",
-  "files": [
-    "dist"
-  ],
-  "main": "./dist/open-fanqie-core.cjs",
-  "module": "./dist/open-fanqie-core.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/open-fanqie-core.js",
-      "require": "./dist/open-fanqie-core.cjs"
-    }
-  },
+  "name": "open-fanqie",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
   "scripts": {
-    "build": "pnpm run clean && tsc -p tsconfig.build.json && vite build",
-    "clean": "rimraf dist coverage",
-    "glyphs:extract": "node scripts/extract-glyphs.mjs",
-    "legacy:compare": "pnpm run build && node scripts/compare-legacy.mjs",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
-  },
-  "keywords": [
-    "jianpu",
-    "numbered-notation",
-    "svg",
-    "fanqie"
-  ],
-  "license": "MIT",
-  "engines": {
-    "node": ">=20"
+    "build": "pnpm -r --if-present build",
+    "clean": "pnpm -r --if-present clean",
+    "dev": "pnpm -F @openfanqie/legacy-app dev",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

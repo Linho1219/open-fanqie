@@ -27,6 +27,14 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@26.2.0)(@vitest/coverage-v8@4.1.10)(vite@8.2.1(@types/node@26.2.0))
 
+  packages/core: {}
+
+  packages/legacy-app:
+    dependencies:
+      '@openfanqie/core':
+        specifier: workspace:*
+        version: link:../core
+
 packages:
 
   '@babel/helper-string-parser@7.29.7':

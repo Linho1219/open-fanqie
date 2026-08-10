@@ -1,0 +1,119 @@
+<table border="1" style="margin:10px;">
+  <tr>
+    <td height="25">
+    
+    <fieldset style="border:1px solid #999;"><legend>页面大小、边距设置</legend>
+        纸张：
+        <select id="cf_page" onChange="TCF.page=this.value;">
+            <option value="A4">A4</option>
+            <option value="A5">A5</option>
+            <option value="A4_horizontal">横版 A4</option>
+            <option value="A5_horizontal">横版 A5</option>
+        </select>
+        &nbsp;
+        边距：
+        上&nbsp;<input id="cf_margin_top" type="text" style="width:25px;" oninput="TCF.margin_top=this.value;">
+        下&nbsp;<input id="cf_margin_bottom" type="text" style="width:25px;" oninput="TCF.margin_bottom=this.value;">
+        左&nbsp;<input id="cf_margin_left" type="text" style="width:25px;" oninput="TCF.margin_left=this.value;">
+        右&nbsp;<input id="cf_margin_right" type="text" style="width:25px;" oninput="TCF.margin_right=this.value;">
+        &nbsp;
+        正文上间距：<input id="cf_body_margin_top" type="text" style="width:25px;" oninput="TCF.body_margin_top=this.value;">
+
+       
+    </fieldset>
+    <fieldset style="border:1px solid #999; margin-top:5px;"><legend>字体设置</legend>
+        标题：
+        <select id="cf_biaoti_font" onChange="TCF.biaoti_font=this.value;">
+            <option value="Microsoft YaHei">雅黑</option>
+            <option value="SimSun">宋体</option>
+            <option value="SimHei">黑体</option>
+            <option value="KaiTi">楷体</option>
+        </select>
+        <select id="cf_biaoti_size" onChange="TCF.biaoti_size=this.value;">
+            <option value="24">24</option>
+            <option value="28">28</option>
+            <option value="32">32</option>
+            <option value="36">36</option>
+            <option value="42">42</option>
+        </select>
+        &nbsp;
+        副标题：
+        <select id="cf_fubiaoti_size" onChange="TCF.fubiaoti_size=this.value;">
+            <option value="16">16</option>
+            <option value="18">18</option>
+            <option value="22">22</option>
+            <option value="24">24</option>
+            <option value="28">28</option>
+        </select>
+        &nbsp;
+        歌词：
+        <select id="cf_geci_font" onChange="TCF.geci_font=this.value;">
+            <option value="Microsoft YaHei">雅黑</option>
+            <option value="SimSun">宋体</option>
+            <option value="SimHei">黑体</option>
+            <option value="KaiTi">楷体</option>
+        </select>
+        <select id="cf_geci_size" onChange="TCF.geci_size=this.value;">
+            <option value="14">14</option>
+            <option value="16">16</option>
+            <option value="18">18</option>
+            <option value="20">20</option>
+            <option value="22">22</option>
+            <option value="24">24</option>
+            <option value="26">26</option>
+            <option value="28">28</option>
+            <option value="30">30</option>
+            <option value="32">32</option>
+        </select>
+        &nbsp;
+        音符：
+        <select id="cf_shuzi_font" onChange="TCF.shuzi_font=this.value;">
+            <option value="a">样式1</option>
+            <option value="c">样式2</option>
+            <option value="b">样式3</option>
+        </select>
+    </fieldset>
+    <fieldset style=" width:350px; height:185px; border:1px solid #999; margin-top:5px; float:left;"><legend>行间距设置</legend>
+    	<div style="border-bottom:1px #aaa solid; margin-bottom:8px; padding-bottom:8px;">
+            针对：
+            <select id="cf_height_page" onChange="setHeightPage();">
+                <option value="-1">所有页</option>
+            </select>
+            <input type="button" onclick="add_cf_height_page();" value="增加针对页">
+            <input type="button" onclick="del_cf_height_page();" value="移除当前页配置">
+        </div>
+        <div style="display:table;">
+            <div style="float:left; margin-right:10px;"><img src="/Public/images/pageConfig1.png" width="191" height="81"/></div>
+            <div style="float:left;">
+                <li>曲的下间距：<input oninput="setTempHeight()" id="cf_height_quci" type="text" style="width:30px;"></li>
+                <li style="padding:5px 0 5px 0;">词的下间距：<input oninput="setTempHeight()" id="cf_height_cici" type="text" style="width:30px;"></li>
+                <li>曲的上间距：<input oninput="setTempHeight()" id="cf_height_ciqu" type="text" style="width:30px;"></li>
+            </div>
+        </div>
+        <div style="border-top:1px #aaa dotted; padding-top:8px; margin-top:8px;">
+        多声部间额外间距： <input oninput="setTempHeight()" id="cf_height_shengbu" type="text" style="width:30px;">（用于多声部页面调整）
+        </div>
+    </fieldset>
+
+    <fieldset  style=" width:150px; height:185px;  border:1px solid #999; margin-top:5px; float:left;"><legend>其他选项</legend>
+        连音线样式：
+        <select id="cf_lianyinxian_type" onChange="TCF.lianyinxian_type=this.value;">
+            <option value="0">自动</option>
+            <option value="1">圆弧</option>
+            <option value="2">平顶</option>
+        </select>
+    </fieldset>
+    </td>
+  </tr>
+  <tr>
+    <td height="30" align="right" valign="bottom">
+    <input name="button" type="submit" id="submit" onClick="savePageConfig();" value="保存设置">
+      &nbsp;
+    <input type="button" name="button2" id="button2" onClick="winClose();" value="取消">
+    &nbsp;</td>
+  </tr>
+</table>
+
+<script>
+pageConfigInit();
+</script>

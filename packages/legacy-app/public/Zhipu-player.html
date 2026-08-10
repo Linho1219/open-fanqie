@@ -1,0 +1,75 @@
+<div style="padding: 10px; width: 460px">
+  播放速度：
+  <select name="speed" id="speed">
+    <option value="2000">30拍/分钟</option>
+    <option value="1500">40拍/分钟</option>
+    <option value="1200">50拍/分钟</option>
+    <option value="1000">60拍/分钟</option>
+    <option value="857">70拍/分钟</option>
+    <option value="750">80拍/分钟</option>
+    <option value="666" selected>90拍/分钟</option>
+    <option value="600">100拍/分钟</option>
+    <option value="545">110拍/分钟</option>
+    <option value="500">120拍/分钟</option>
+    <option value="461">130拍/分钟</option>
+    <option value="428">140拍/分钟</option>
+    <option value="400">150拍/分钟</option>
+    <option value="375">160拍/分钟</option>
+    <option value="352">170拍/分钟</option>
+    <option value="333">180拍/分钟</option>
+    <option value="315">190拍/分钟</option>
+    <option value="300">200拍/分钟</option>
+  </select>
+  <span style="display: none">
+    修正值：
+    <select name="adjust" id="adjust">
+      <option value="1" selected>×1</option>
+      <option value="0.9">×1.1</option>
+      <option value="0.8">×1.2</option>
+      <option value="0.7">×1.3</option>
+      <option value="0.6">×1.4</option>
+      <option value="0.5">×1.5</option>
+    </select>
+  </span>
+  <input id="playBut" type="button" value="播放" onClick="toPlay();" />
+  <input type="button" value="停止" onClick="stopPlay();" />
+  <label><input type="checkbox" id="playAutoRoll" checked />自动滚屏</label>
+  <label><input type="checkbox" id="hulvFanfu" />忽略反复记号</label>
+  <div style="padding-top: 5px">
+    1、只有在停止播放后，才可以修改播放速度和“忽略反复记号”选项。<br />
+    2、需要识别反复记号，请点击停止播放后取消“忽略反复记号”的勾选。<br />
+    3、在播放过程，您可以随时点击乐谱上的音符调整播放进度。<br />
+  </div>
+</div>
+<script>
+  if (midiPlay.instrumentState != "ready") {
+    midiPlay.init();
+  }
+
+  var playJiepai = $("svg text[data-jiepai]").attr("data-jiepai");
+  if (parseFloat(playJiepai)) {
+    playJiepai = Math.round(playJiepai / 10) * 10;
+  } else {
+    playJiepai = 90;
+  }
+  setSelectOptionByDisplayValue(
+    document.getElementById("speed"),
+    playJiepai + "拍/分钟"
+  );
+
+  function setSelectOptionByDisplayValue(selectElement, displayValue) {
+    for (var i = 0; i < selectElement.options.length; i++) {
+      if (selectElement.options[i].text === displayValue) {
+        selectElement.options[i].selected = true;
+        break;
+      }
+    }
+  }
+  $(".mask").fadeOut(500);
+  setTimeout(function () {
+    $(".win").animate(
+      { left: $(window).width() - 500, top: $(window).height() - 200 },
+      500
+    );
+  }, 10);
+</script>
