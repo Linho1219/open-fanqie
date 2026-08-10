@@ -87,6 +87,126 @@ Q: 1 - ||
     expect(document.diagnostics).toEqual([])
   })
 
+  it('resolves slur nesting after assigning parentheses to notes', () => {
+    const document = parse(`Q: (1 (1) 1) ((2 3) 4) |`)
+    const line = document.pages[0]?.groups[0]?.voices[0]
+
+    expect(line?.elements.flatMap((element) => ('code' in element ? [element.code] : []))).toEqual([
+      '1(',
+      '1()',
+      '1)',
+      '2((',
+      '3)',
+      '4)',
+      '|',
+    ])
+    expect(line?.marks.map(({ type, start, end }) => ({ type, start, end }))).toEqual([
+      { type: 'slur', start: 0, end: 1 },
+      { type: 'slur', start: 1, end: 2 },
+      { type: 'slur', start: 3, end: 4 },
+      { type: 'slur', start: 3, end: 5 },
+    ])
+    expect(document.diagnostics).toEqual([])
+  })
+
+  it('accepts zero-length nested slurs without drawing ranges', () => {
+    const document = parse(`Q: (1) (1 (2)) ((3) 4) |`)
+    const line = document.pages[0]?.groups[0]?.voices[0]
+
+    expect(line?.marks.map(({ start, end }) => [start, end])).toEqual([
+      [1, 2],
+      [3, 4],
+    ])
+    expect(document.diagnostics).toEqual([])
+  })
+
+  it('attaches parentheses to notes across intervening barlines', () => {
+    const document = parse(`Q: ( |/ 1 2 |)`)
+    const line = document.pages[0]?.groups[0]?.voices[0]
+
+    expect(line?.elements.flatMap((element) => ('code' in element ? [element.code] : []))).toEqual([
+      '|/',
+      '1(',
+      '2)',
+      '|',
+    ])
+    expect(line?.marks).toMatchObject([{ type: 'slur', start: 1, end: 2 }])
+    expect(document.diagnostics).toEqual([])
+  })
+
+  it('anchors hairpins to the preceding note and preserves boundary code', () => {
+    const document = parse(`Q: 1> 2/~ 3! |`)
+    const line = document.pages[0]?.groups[0]?.voices[0]
+
+    expect(line?.marks).toMatchObject([{ type: 'decrescendo', start: 0, end: 3 }])
+    expect(line?.elements[1]).toMatchObject({ kind: 'note', code: '2/~' })
+    expect(line?.elements[3]).toMatchObject({ kind: 'note', code: '3!' })
+    expect(document.diagnostics).toEqual([])
+  })
+
+  it('keeps trailing lyric punctuation separate from its syllable', () => {
+    const document = parse(`Q: 1 2 |\nC: 你，ABC,`)
+    const syllables = document.pages[0]?.groups[0]?.voices[0]?.lyrics[0]?.syllables
+
+    expect(syllables).toMatchObject([
+      { text: '你', trailingPunctuation: '，' },
+      { text: 'ABC', trailingPunctuation: ',' },
+    ])
+    expect(document.diagnostics).toEqual([])
+  })
+
+  it('binds lyrics to the most recent music line regardless of the C suffix', () => {
+    const document = parse(`Q1: 1\nC2: 甲\nQ2: 2\nC1: 乙`)
+    const voices = document.pages[0]?.groups[0]?.voices
+
+    expect(voices?.[0]?.lyrics[0]?.syllables[0]?.text).toBe('甲')
+    expect(voices?.[1]?.lyrics[0]?.syllables[0]?.text).toBe('乙')
+    expect(document.diagnostics).toEqual([])
+  })
+
+  it('parses the legacy temporary-voice shorthand', () => {
+    const document = parse(`Y: Piano, Voice\nS: 备注\nQ: { | 6, - } 2, - |`)
+    const layer = document.pages[0]?.groups[0]?.voices[0]?.elements[0]
+
+    expect(layer).toMatchObject({
+      kind: 'inline-layer',
+      role: 'voice',
+      elements: [{ kind: 'note', pitch: 6, octave: -1 }, { kind: 'sustain' }],
+    })
+    expect(document.metadata.instruments).toEqual(['Piano', 'Voice'])
+    expect(document.metadata.remarks).toEqual(['备注'])
+    expect(document.diagnostics).toEqual([])
+  })
+
+  it('carries slurs across music lines of the same voice', () => {
+    const document = parse(`Q: 1 2 (3 4 |\nQ: 1 2 3) 4 |`)
+    const groups = document.pages[0]?.groups ?? []
+
+    expect(groups[0]?.voices[0]?.marks).toMatchObject([{ continuationToNext: true }])
+    expect(groups[1]?.voices[0]?.marks).toMatchObject([{ continuationFromPrevious: true }])
+    expect(document.diagnostics).toEqual([])
+  })
+
+  it('carries slurs across page breaks', () => {
+    const document = parse(`Q: 1 (2 |\n[fenye]\nQ: 3) 4 |`)
+
+    expect(document.pages[0]?.groups[0]?.voices[0]?.marks).toMatchObject([
+      { continuationToNext: true },
+    ])
+    expect(document.pages[1]?.groups[0]?.voices[0]?.marks).toMatchObject([
+      { continuationFromPrevious: true },
+    ])
+    expect(document.diagnostics).toEqual([])
+  })
+
+  it('does not carry slurs across intervening voices', () => {
+    const document = parse(`Q3: 1 (2 |\nQ1: 3 4 |\nQ3: 5) 6 |`)
+    const lines = document.pages[0]?.groups.flatMap((group) => group.voices) ?? []
+
+    expect(lines.flatMap(({ marks }) => marks)).toEqual([])
+    expect(document.diagnostics).toEqual([])
+  })
+
   it('reports malformed input without throwing', () => {
     const document = parse(`hello\nD: h\nQ: 1&unknown (2`)
 

@@ -50,10 +50,9 @@ const KNOWN_NOTE_COMMANDS = new Set([
   'xby',
   'cy',
   'tr',
-  'sbf',
 ])
 
-const KNOWN_BARLINE_COMMANDS = new Set(['fine', 'dc', 'ds', 'ty', 'hs'])
+const KNOWN_BARLINE_COMMANDS = new Set(['fine', 'dc', 'ds', 'ty', 'hs', 'sbf'])
 
 interface ParseContext {
   diagnostics: Diagnostic[]
@@ -69,11 +68,13 @@ interface OpenMark {
   sourceIndex: number
   caption?: string
   openEnd?: boolean
+  continuationFromPrevious?: boolean
 }
 
 interface ParsedMusicLine {
   elements: MusicElement[]
   marks: Mark[]
+  carriedCurvedMarks: OpenMark[]
 }
 
 function location(context: ParseContext, index: number, length = 1): SourceLocation {
@@ -211,6 +212,14 @@ function lastAttachableIndex(elements: MusicElement[]): number | undefined {
   return undefined
 }
 
+function lastTimedIndex(elements: MusicElement[]): number | undefined {
+  for (let index = elements.length - 1; index >= 0; index -= 1) {
+    const element = elements[index]
+    if (element?.kind === 'note' || element?.kind === 'sustain') return index
+  }
+  return undefined
+}
+
 function appendModifier(element: NoteElement, modifier: string): boolean {
   if (modifier === "'") element.octave += 1
   else if (modifier === ',') element.octave -= 1
@@ -271,6 +280,9 @@ function closeMark(
   }
   if (open.caption !== undefined) mark.caption = open.caption
   if (open.openEnd !== undefined) mark.openEnd = open.openEnd
+  if (open.continuationFromPrevious !== undefined) {
+    mark.continuationFromPrevious = open.continuationFromPrevious
+  }
   if (mark.type === 'tuplet') {
     const count = elements
       .slice(open.start, end + 1)
@@ -280,14 +292,46 @@ function closeMark(
   return mark
 }
 
-function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine {
+function parseMusicLine(
+  source: string,
+  context: ParseContext,
+  carriedCurvedMarks: OpenMark[] = [],
+  allowContinuation = false,
+): ParsedMusicLine {
   const elements: MusicElement[] = []
   const marks: Mark[] = []
   const curvedMarks: OpenMark[] = []
+  const queuedCurvedMarks: OpenMark[] = []
+  const pendingCurvedMarks: OpenMark[] = []
   const dynamicMarks: OpenMark[] = []
   const voltaMarks: OpenMark[] = []
   const pendingCurvedCodes: string[] = []
   let cursor = 0
+  let attachedCarriedMarks = false
+
+  const activatePendingCurvedMarks = (): void => {
+    curvedMarks.push(...pendingCurvedMarks.splice(0))
+  }
+
+  const attachQueuedCurvedMarks = (elementIndex: number): void => {
+    queuedCurvedMarks.forEach((mark) => {
+      mark.start = elementIndex
+    })
+    pendingCurvedMarks.push(...queuedCurvedMarks.splice(0))
+  }
+
+  const attachCarriedCurvedMarks = (elementIndex: number): void => {
+    if (attachedCarriedMarks) return
+    carriedCurvedMarks.forEach((mark) => {
+      curvedMarks.push({
+        ...mark,
+        start: elementIndex,
+        sourceIndex: 0,
+        continuationFromPrevious: true,
+      })
+    })
+    attachedCarriedMarks = true
+  }
 
   while (cursor < source.length) {
     const char = source[cursor]
@@ -298,17 +342,21 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
     }
 
     if (isNoteDigit(char)) {
+      activatePendingCurvedMarks()
       const parsed = createNote(source, cursor, context, 4)
       if (pendingCurvedCodes.length > 0) {
         const insertion = pendingCurvedCodes.splice(0).join('')
         parsed.note.code = `${parsed.note.code.slice(0, 1)}${insertion}${parsed.note.code.slice(1)}`
       }
       elements.push(parsed.note)
+      attachCarriedCurvedMarks(elements.length - 1)
+      attachQueuedCurvedMarks(elements.length - 1)
       cursor = parsed.next
       continue
     }
 
     if (char === '-') {
+      activatePendingCurvedMarks()
       const sustain: SustainElement = {
         kind: 'sustain',
         duration: 4,
@@ -318,11 +366,14 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
       }
       if (pendingCurvedCodes.length > 0) sustain.code += pendingCurvedCodes.splice(0).join('')
       elements.push(sustain)
+      attachCarriedCurvedMarks(elements.length - 1)
+      attachQueuedCurvedMarks(elements.length - 1)
       cursor += 1
       continue
     }
 
     if (char === '|' || char === ':') {
+      activatePendingCurvedMarks()
       const parsed = parseBarline(source, cursor, context)
       if (parsed === undefined) {
         report(context, 'invalid-barline', `Invalid barline starting with '${char}'.`, cursor)
@@ -335,6 +386,15 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
     }
 
     if (char === '~' || char === '^') {
+      const attachIndex = lastAttachableIndex(elements)
+      const attachable = attachIndex === undefined ? undefined : elements[attachIndex]
+      if (
+        attachable?.kind === 'note' ||
+        attachable?.kind === 'sustain' ||
+        attachable?.kind === 'barline'
+      ) {
+        attachable.code += char
+      }
       const boundary: BeatBoundaryElement = {
         kind: 'beat-boundary',
         behavior: char === '~' ? 'join' : 'split',
@@ -347,10 +407,11 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
     }
 
     if (char === '(') {
+      activatePendingCurvedMarks()
       const tuplet = source[cursor + 1] === 'y'
       let next = cursor + (tuplet ? 2 : 1)
       while (source[next] === '+') next += 1
-      const previousIndex = lastAttachableIndex(elements)
+      const previousIndex = lastTimedIndex(elements)
       const previous = previousIndex === undefined ? undefined : elements[previousIndex]
       const code = tuplet ? '(ys' : '('
       let contentIndex = next
@@ -361,24 +422,30 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
         (previous?.kind === 'note' || previous?.kind === 'sustain')
       if (startsAtPrevious) previous.code += code
       else pendingCurvedCodes.push(code)
-      curvedMarks.push({
+      const open: OpenMark = {
         type: tuplet ? 'tuplet' : 'slur',
         start: startsAtPrevious && previousIndex !== undefined ? previousIndex : elements.length,
         level: next - cursor - (tuplet ? 2 : 1),
         sourceIndex: cursor,
-      })
+      }
+      if (startsAtPrevious) curvedMarks.push(open)
+      else queuedCurvedMarks.push(open)
       cursor = next
       continue
     }
 
     if (char === ')') {
-      const open = curvedMarks.pop()
-      const end = lastAttachableIndex(elements)
-      if (open === undefined || end === undefined) {
-        report(context, 'unmatched-mark-end', "Unmatched ')' mark terminator.", cursor)
-      } else {
+      const open = curvedMarks.pop() ?? pendingCurvedMarks.pop()
+      const end = lastTimedIndex(elements)
+      if (end !== undefined) {
         const attachable = elements[end]
         if (attachable?.kind === 'note' || attachable?.kind === 'sustain') attachable.code += ')'
+      }
+      if (open === undefined || end === undefined) {
+        if (!allowContinuation) {
+          report(context, 'unmatched-mark-end', "Unmatched ')' mark terminator.", cursor)
+        }
+      } else if (open.start !== end || open.continuationFromPrevious === true) {
         marks.push(closeMark(open, end, cursor, context, elements))
       }
       cursor += 1
@@ -388,9 +455,10 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
     if (char === '<' || char === '>') {
       let next = cursor + 1
       while (source[next] === '+') next += 1
+      const previousIndex = lastAttachableIndex(elements)
       dynamicMarks.push({
         type: char === '<' ? 'crescendo' : 'decrescendo',
-        start: elements.length,
+        start: previousIndex ?? elements.length,
         level: next - cursor - 1,
         sourceIndex: cursor,
       })
@@ -404,6 +472,14 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
       if (open === undefined || end === undefined) {
         report(context, 'unmatched-dynamic-end', "Unmatched '!' dynamic terminator.", cursor)
       } else {
+        const attachable = elements[end]
+        if (
+          attachable?.kind === 'note' ||
+          attachable?.kind === 'sustain' ||
+          attachable?.kind === 'barline'
+        ) {
+          attachable.code += '!'
+        }
         marks.push(closeMark(open, end, cursor, context, elements))
       }
       cursor += 1
@@ -463,6 +539,7 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
           openEnd,
         }
         if (caption !== undefined) open.caption = caption
+        attachable.code += `[${openEnd ? '/' : ''}${'+'.repeat(level)}${caption === undefined ? '' : `'${caption}'`}`
         voltaMarks.push(open)
         cursor = next
         continue
@@ -480,6 +557,10 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
         report(context, 'unmatched-volta-end', "Unmatched ']' volta terminator.", cursor)
       } else {
         if (source[cursor + 1] === '/') open.openEnd = true
+        const attachable = elements[end]
+        if (attachable?.kind === 'barline') {
+          attachable.code += `]${source[cursor + 1] === '/' ? '/' : ''}`
+        }
         marks.push(closeMark(open, end, cursor, context, elements))
       }
       cursor += source[cursor + 1] === '/' ? 2 : 1
@@ -494,12 +575,12 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
         continue
       }
       const inner = source.slice(cursor + 1, end)
-      const layerMatch = inner.match(/^\s*(bz|dsb)\b/)
+      const layerMatch = inner.match(/^\s*(?:(bz|dsb)\b|\|)/)
       if (layerMatch === null) {
         report(
           context,
           'invalid-inline-layer',
-          "Inline block must start with 'bz' or 'dsb'.",
+          "Inline block must start with 'bz', 'dsb', or the '|' voice shorthand.",
           cursor,
           end - cursor + 1,
         )
@@ -609,12 +690,36 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
       continue
     }
 
-    report(context, 'unsupported-token', `Unsupported music token '${char}'.`, cursor)
+    if (!isCjkCharacter(char)) {
+      report(context, 'unsupported-token', `Unsupported music token '${char}'.`, cursor)
+    }
     cursor += 1
   }
 
-  for (const open of curvedMarks) {
+  activatePendingCurvedMarks()
+  for (const open of queuedCurvedMarks) {
     report(context, 'unclosed-mark', `Unclosed '${open.type}' mark.`, open.sourceIndex)
+  }
+  const carriedOutput: OpenMark[] = []
+  const lineEnd = lastTimedIndex(elements)
+  if (allowContinuation && lineEnd !== undefined) {
+    curvedMarks.forEach((open) => {
+      const mark = closeMark(open, lineEnd, source.length, context, elements)
+      mark.continuationToNext = true
+      marks.push(mark)
+      carriedOutput.push({
+        type: open.type,
+        start: 0,
+        level: open.level,
+        sourceIndex: open.sourceIndex,
+        ...(open.caption === undefined ? {} : { caption: open.caption }),
+        ...(open.openEnd === undefined ? {} : { openEnd: open.openEnd }),
+      })
+    })
+  } else {
+    for (const open of curvedMarks) {
+      report(context, 'unclosed-mark', `Unclosed '${open.type}' mark.`, open.sourceIndex)
+    }
   }
   for (const open of dynamicMarks) {
     report(context, 'unclosed-dynamic', `Unclosed '${open.type}' mark.`, open.sourceIndex)
@@ -623,7 +728,7 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
     report(context, 'unclosed-volta', 'Unclosed volta mark.', open.sourceIndex)
   }
 
-  return { elements, marks }
+  return { elements, marks, carriedCurvedMarks: carriedOutput }
 }
 
 function isCjkCharacter(char: string): boolean {
@@ -701,7 +806,11 @@ function parseLyrics(source: string, context: ParseContext): LyricLine {
     if (isPunctuation(char)) {
       const previous = syllables[syllables.length - 1]
       if (previous === undefined) push(char, cursor, cursor + 1)
-      else previous.text += char
+      else {
+        previous.trailingPunctuation = `${previous.trailingPunctuation ?? ''}${char}`
+        previous.source.length =
+          cursor + 1 - (previous.source.offset - context.lineOffset - context.columnOffset)
+      }
       cursor += 1
       continue
     }
@@ -791,6 +900,19 @@ function parseMetadata(
     metadata.tempos.push(/^\d+(?:\.\d+)?$/.test(value) ? Number(value) : value)
     return true
   }
+  if (prefix === 'Y') {
+    metadata.instruments.push(
+      ...value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    )
+    return true
+  }
+  if (prefix === 'S') {
+    metadata.remarks.push(value)
+    return true
+  }
   return false
 }
 
@@ -803,11 +925,39 @@ export function parse(input: string): ScoreDocument {
     authors: [],
     meters: [],
     tempos: [],
+    instruments: [],
+    remarks: [],
   }
   const pages: ScorePage[] = [{ index: 0, groups: [] }]
   let page = pages[0] as ScorePage
   let currentGroup: VoiceGroup | undefined
+  const continuationsByVoice = new Map<number, OpenMark[]>()
+  const continuationLinesByVoice = new Map<number, ScoreLine>()
+  let previousMusicVoice: number | undefined
   let lineOffset = 0
+
+  const discardContinuations = (): void => {
+    continuationLinesByVoice.forEach((scoreLine) => {
+      scoreLine.marks = scoreLine.marks.filter(
+        ({ continuationToNext }) => continuationToNext !== true,
+      )
+    })
+    continuationLinesByVoice.clear()
+    continuationsByVoice.clear()
+  }
+
+  const reportDanglingContinuations = (line: number, offset: number): void => {
+    continuationsByVoice.forEach((marks) => {
+      marks.forEach((mark) => {
+        diagnostics.push({
+          severity: 'warning',
+          code: 'unclosed-mark',
+          message: `Unclosed '${mark.type}' mark.`,
+          source: metadataLineLocation(line, offset, 0),
+        })
+      })
+    })
+  }
 
   const lines = source.split('\n')
   lines.forEach((rawLine, lineIndex) => {
@@ -863,6 +1013,9 @@ export function parse(input: string): ScoreDocument {
 
     if (prefix === 'Q') {
       const voice = numberText === '' ? 1 : Number(numberText)
+      if (previousMusicVoice !== undefined && previousMusicVoice !== voice) {
+        discardContinuations()
+      }
       if (voice <= 1 || currentGroup === undefined) {
         currentGroup = { index: page.groups.length, voices: [] }
         page.groups.push(currentGroup)
@@ -876,7 +1029,7 @@ export function parse(input: string): ScoreDocument {
           value.length,
         )
       }
-      const parsed = parseMusicLine(value, context)
+      const parsed = parseMusicLine(value, context, continuationsByVoice.get(voice) ?? [], true)
       const scoreLine: ScoreLine = {
         voice,
         elements: parsed.elements,
@@ -887,17 +1040,21 @@ export function parse(input: string): ScoreDocument {
       }
       if (caption !== undefined) scoreLine.caption = caption
       currentGroup.voices.push(scoreLine)
+      if (parsed.carriedCurvedMarks.length === 0) {
+        continuationsByVoice.delete(voice)
+        continuationLinesByVoice.delete(voice)
+      } else {
+        continuationsByVoice.set(voice, parsed.carriedCurvedMarks)
+        continuationLinesByVoice.set(voice, scoreLine)
+      }
+      previousMusicVoice = voice
       lineOffset += rawLine.length + 1
       return
     }
 
     if (prefix === 'C') {
-      const requestedVoice = numberText === '' ? undefined : Number(numberText)
       const candidates = currentGroup?.voices ?? []
-      const scoreLine =
-        requestedVoice === undefined
-          ? candidates[candidates.length - 1]
-          : candidates.find((line) => line.voice === requestedVoice)
+      const scoreLine = candidates[candidates.length - 1]
       if (scoreLine === undefined) {
         report(
           context,
@@ -917,6 +1074,9 @@ export function parse(input: string): ScoreDocument {
     report(context, 'unknown-prefix', `Unknown prefix '${prefix}'.`, 0, value.length)
     lineOffset += rawLine.length + 1
   })
+
+  reportDanglingContinuations(lines.length, source.length)
+  discardContinuations()
 
   return { source, metadata, pages, diagnostics }
 }

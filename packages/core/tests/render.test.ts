@@ -43,9 +43,9 @@ describe('render', () => {
         elementCount(page, 'path'),
       ]),
     ).toEqual([
-      [391, 141, 68, 11],
-      [692, 359, 203, 10],
-      [603, 276, 141, 20],
+      [391, 141, 77, 11],
+      [692, 359, 210, 10],
+      [603, 276, 150, 20],
     ])
     expect(pages[0]).toContain('x="141" y="266" xlink:href="#shuzi_b_0"')
     expect(pages[1]).toContain('x="103" y="130" xlink:href="#shuzi_b_6"')
@@ -117,6 +117,25 @@ Q: 1// 2// 3// 4// |
     ])
   })
 
+  it('keeps hidden placeholder notes in the positioned SVG stream', () => {
+    const svg = render(`Q: 8 1 |`)
+
+    expect(svg).toContain('<g id="shuzi_null"')
+    expect(svg).toContain(
+      'x="83" y="130" xlink:href="#shuzi_null" time="0" audio="" notepos="0_1_1" code="8"',
+    )
+  })
+
+  it('numbers grace-note definitions by page-local source order', () => {
+    const svg = render(`Q: 1[1/] 2[2/] 3[h3/] |\n[fenye]\nQ: 1[1/] |`)
+    const pages = svg.split('[fenye]').filter(Boolean)
+
+    expect(pages[0]).toContain('<g id="qy0_0"')
+    expect(pages[0]).toContain('<g id="qy1_0"')
+    expect(pages[0]).toContain('<g id="hy2_0"')
+    expect(pages[1]).toContain('<g id="qy0_1"')
+  })
+
   it('aligns voices at beat starts without distributing notes within a beat', () => {
     const svg = render(`
 Q1: 1// 2// 3// 4// |
@@ -135,6 +154,151 @@ Q2: 1/ 2/ |
       { x: 128, code: '2/' },
       { x: 213, code: '|' },
     ])
+  })
+
+  it('uses reduced spacing throughout quarter-note tuplets', () => {
+    const svg = render(`Q: (y1 2 3) 4 |`)
+
+    expect(uses(svg, 1)).toEqual([
+      { x: 83, code: '1(ys' },
+      { x: 108, code: '2' },
+      { x: 133, code: '3)' },
+      { x: 170.5, code: '4' },
+      { x: 205.5, code: '|' },
+    ])
+  })
+
+  it('stacks genuinely overlapping slurs while sharing touching endpoints', () => {
+    const nested = render(`Q: ((1 2) 3) |`)
+    const coincident = render(`Q: ((1 2)) |`)
+    const chained = render(`Q: (1 (1) 1) |`)
+
+    expect(nested).toContain('M 84,114 C')
+    expect(nested).toContain('M 84,106 C')
+    expect(coincident).toContain('M 84,114 C')
+    expect(coincident).toContain('M 84,109 C')
+    expect(chained.match(/M \d+(?:\.\d+)?,114 C/g)).toHaveLength(4)
+    expect(chained).not.toContain(',106 C')
+  })
+
+  it('matches legacy dynamics, hairpins, and volta positioning', () => {
+    const svg = render(`
+Q: 1&f 2 |
+Q: 1>&mf 2 3! |
+Q: 1> 2 3!&p |
+Q: 1>+ 2 3! |
+Q: 1>++ 2 3! |
+Q: |/[+"1." 1 2 |]
+`)
+
+    expect(svg).toContain('x="83" y="127" xlink:href="#lidu_f"')
+    expect(svg).toContain('x="58" y="210" xlink:href="#lidu_mf"')
+    expect(svg).toContain('x="178" y="300" xlink:href="#lidu_p"')
+    expect(svg).toContain('x1="76" y1="185" x2="165" y2="190"')
+    expect(svg).toContain('x1="76" y1="195" x2="165" y2="190"')
+    expect(svg).toContain('x1="76" y1="360" x2="165" y2="365"')
+    expect(svg).toContain('x1="76" y1="445" x2="165" y2="450"')
+    expect(svg).toContain('x1="77" y1="550" x2="77" y2="540"')
+    expect(svg).toContain('x1="77" y1="540" x2="153.5" y2="540"')
+    expect(svg).toContain('x1="153.5" y1="550" x2="153.5" y2="540"')
+    expect(svg).toContain(
+      'x="80" y="550" dy="4.026" fill="#303030" font-size="12" font-family="Microsoft YaHei" xml:space="preserve">1.</text>',
+    )
+  })
+
+  it('renders lyric punctuation separately using legacy width estimates', () => {
+    const svg = render(`Q: 1 2 |\nC: 你，ABC,`, {
+      pageConfig: { geci_size: 16 },
+    })
+
+    expect(svg).toContain(
+      'x="75" y="168" dy="5.368" fill="#101010" font-size="16" font-family="Microsoft YaHei" cipos="0_1_1">你</text>',
+    )
+    expect(svg).toContain(
+      'x="91" y="168" dy="5.368" fill="#101010" font-size="16" font-family="Microsoft YaHei">，</text>',
+    )
+    expect(svg).toContain(
+      'x="112.5" y="168" dy="5.368" fill="#101010" font-size="16" font-family="Microsoft YaHei" cipos="0_1_2">ABC</text>',
+    )
+    expect(svg).toContain(
+      'x="135.5" y="168" dy="5.368" fill="#101010" font-size="16" font-family="Microsoft YaHei">,</text>',
+    )
+  })
+
+  it('aligns and reserves space for temporary accompaniment and voices', () => {
+    const svg = render(`
+Q: 1 2 {dsb 3 4} 5 6 |
+C: 甲乙丙丁
+Q: 1 2 {bz 3/ 4/} 5 6 |
+`)
+
+    expect(svg).toContain('x="158" y="130" xlink:href="#shuzi_b_3"')
+    expect(svg).toContain('x="195.5" y="130" xlink:href="#shuzi_b_4"')
+    expect(svg).toContain('x="158" y="186" xlink:href="#shuzi_b_5"')
+    expect(svg).toContain('x="195.5" y="186" xlink:href="#shuzi_b_6"')
+    expect(svg).toContain('x="74" y="224"')
+    expect(svg).toContain('x="158" y="292" xlink:href="#shuzi_b_bian_3"')
+    expect(svg).toContain('x="183" y="292" xlink:href="#shuzi_b_bian_4"')
+    expect(svg).toContain('x="158" y="332" xlink:href="#shuzi_b_5"')
+    expect(svg).toContain('x="220.5" y="332" xlink:href="#shuzi_b_6"')
+  })
+
+  it('reserves SVG brace columns around an in-line temporary voice', () => {
+    const svg = render(`Q: 1 2 | {dsb 6, - } 2 - | 3 4 |`)
+
+    expect(svg).toContain('<g id="dakuohu_zuo_2"')
+    expect(svg).toContain('<g id="dakuohu_you_2"')
+    expect(svg).toContain('x="175.5" y="158" xlink:href="#dakuohu_zuo_2"')
+    expect(svg).toContain('x="210.5" y="130" xlink:href="#shuzi_b_6"')
+    expect(svg).toContain('x="210.5" y="186" xlink:href="#shuzi_b_2"')
+    expect(svg).toContain('x="283" y="158" xlink:href="#dakuohu_you_2"')
+    expect(svg).toContain('x="303" y="158" xlink:href="#xiaojiexian"')
+    expect(svg).toContain('x="338" y="158" xlink:href="#shuzi_b_3"')
+  })
+
+  it('closes a temporary voice after its matching multi-measure duration', () => {
+    const svg = render(`Q: 3 4 | {dsb 1 2 3 4 | 5 6 7 1'} 5 6 7 1' | 1' 7 6 5 | 5 5 |`)
+
+    expect(svg).toContain('x="212.5" y="158" xlink:href="#dakuohu_zuo_2"')
+    expect(svg).toContain('x="261.5" y="130" xlink:href="#shuzi_b_1"')
+    expect(svg).toContain('x="261.5" y="186" xlink:href="#shuzi_b_5"')
+    expect(svg).toContain('x="468" y="130" xlink:href="#xiaojiexian"')
+    expect(svg).toContain('x="468" y="186" xlink:href="#xiaojiexian"')
+    expect(svg).toContain('x="723.5" y="158" xlink:href="#dakuohu_you_2"')
+    expect(svg).toContain('x="751.5" y="158" xlink:href="#xiaojiexian"')
+    expect(svg).toContain('x="800.5" y="158" xlink:href="#shuzi_b_5"')
+    expect(svg).toContain('x="923" y="158" xlink:href="#xiaojiexian"')
+  })
+
+  it('uses reduced SVG parentheses for temporary accompaniment', () => {
+    const svg = render(`Q: 3 4 | {bz 1&zkh 2 3 4&ykh} 5 6 7 1 |`)
+
+    expect(svg).toContain('<g id="kuohu_zuo_bian"')
+    expect(svg).toContain('<g id="kuohu_you_bian"')
+    expect(svg).toMatch(/xlink:href="#kuohu_zuo_bian"/)
+    expect(svg).toMatch(/xlink:href="#kuohu_you_bian"/)
+  })
+
+  it('emits temporary-voice braces only at visible branch boundaries', () => {
+    const rightOnly = render(`Q: 1 2 {dsb 3 4} 5 6 | 7 1 |`)
+    const leftOnly = render(`Q: 1 2 | {dsb 3 4} 5 6 |`)
+
+    expect(rightOnly).not.toContain('xlink:href="#dakuohu_zuo_2"')
+    expect(rightOnly).toContain('x="230.5" y="158" xlink:href="#dakuohu_you_"')
+    expect(rightOnly).toContain('x="250.5" y="158" xlink:href="#xiaojiexian"')
+    expect(leftOnly).toContain('x="175.5" y="158" xlink:href="#dakuohu_zuo_2"')
+    expect(leftOnly).not.toMatch(/xlink:href="#dakuohu_you_/)
+    expect(leftOnly).toContain('x="210.5" y="130" xlink:href="#shuzi_b_3"')
+    expect(leftOnly).toContain('x="283" y="186" xlink:href="#xiaojiexian"')
+  })
+
+  it('splits same-page cross-line slurs at the page margins', () => {
+    const svg = render(`Q: 1 2 (3 4 |\nQ: 1 2 3) 4 |`)
+
+    expect(svg).toContain('xlink:href="#lianyinxian_zuo"')
+    expect(svg).toContain('xlink:href="#lianyinxian_you"')
+    expect(svg).toContain('x2="924" y2="104.8"')
+    expect(svg).toContain('x1="77" y1="182.8"')
   })
 
   it('keeps short multi-measure phrases at their natural width', () => {

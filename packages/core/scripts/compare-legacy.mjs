@@ -4,7 +4,8 @@ import { resolve } from 'node:path'
 import { render } from '../dist/open-fanqie-core.js'
 
 const ENDPOINT = 'http://zhipu.lezhi99.com/Zhipu-draw'
-const FIXTURE = resolve('tests/fixtures/test.jps')
+const fixtureArgument = process.argv.find((argument) => argument.startsWith('--fixture='))
+const FIXTURE = resolve(fixtureArgument?.slice('--fixture='.length) ?? 'tests/fixtures/test.jps')
 
 const defaultConfig = {
   page: 'A4',
@@ -394,14 +395,14 @@ function comparePage(apiSvg, localSvg) {
   }
 }
 
-async function legacyRender(code, config) {
+async function legacyRender(code, config, customCode) {
   const response = await fetch(ENDPOINT, {
     method: 'POST',
     signal: AbortSignal.timeout(20_000),
     headers: { 'content-type': 'application/x-www-form-urlencoded;charset=UTF-8' },
     body: new URLSearchParams({
       code,
-      customCode: '',
+      customCode,
       pageConfig: JSON.stringify(config),
       pageNum: '-1',
     }),
@@ -410,22 +411,33 @@ async function legacyRender(code, config) {
   return response.text()
 }
 
-const code = await readFile(FIXTURE, 'utf8')
+const fixtureSource = await readFile(FIXTURE, 'utf8')
+const isExample = FIXTURE.endsWith('.json')
+const example = isExample ? JSON.parse(fixtureSource) : undefined
+const code = example?.code ?? fixtureSource
+const customCode = example?.custom_code === 'null' ? '' : (example?.custom_code ?? '')
+const parsedFixtureConfig =
+  typeof example?.page_config === 'string' && example.page_config !== ''
+    ? JSON.parse(example.page_config)
+    : undefined
+const fixtureConfig = parsedFixtureConfig ?? defaultConfig
 const caseArgument = process.argv.find((argument) => argument.startsWith('--case='))
 const caseName = caseArgument?.slice('--case='.length)
 const selected =
   caseName !== undefined
     ? cases.filter(([name]) => name === caseName)
-    : process.argv.includes('--all')
-      ? cases
-      : cases.slice(0, 1)
+    : isExample
+      ? [['example', {}]]
+      : process.argv.includes('--all')
+        ? cases
+        : cases.slice(0, 1)
 if (selected.length === 0) throw new Error(`Unknown comparison case: ${caseName}`)
 
 async function compareCase(name, overrides) {
-  const config = { ...defaultConfig, ...overrides }
+  const config = { ...fixtureConfig, ...overrides }
   const [apiOutput, localOutput] = await Promise.all([
-    legacyRender(code, config),
-    Promise.resolve(render(code, { pageConfig: config })),
+    legacyRender(code, config, customCode),
+    Promise.resolve(render(code, { pageConfig: config, customCode })),
   ])
   const apiPages = splitPages(apiOutput)
   const localPages = splitPages(localOutput)

@@ -33,6 +33,23 @@ import type {
 
 const FONT_SIZE_FIX = 0.8355
 const INK = '#1b1b1b'
+const DYNAMIC_ORNAMENTS = new Set([
+  'ppp',
+  'pp',
+  'p',
+  'mp',
+  'mf',
+  'f',
+  'ff',
+  'fff',
+  'cresc',
+  'dim',
+  'sf',
+  'fp',
+  'sfp',
+  'atempo',
+  'rit',
+])
 
 function text(
   value: string,
@@ -147,6 +164,15 @@ function renderHeader(
   registry: GlyphRegistry,
 ): { markup: string[]; bodyY: number } {
   const markup: string[] = []
+  if (
+    metadata.titles.length === 0 &&
+    metadata.authors.length === 0 &&
+    metadata.mode === undefined &&
+    metadata.meters.length === 0 &&
+    metadata.tempos.length === 0
+  ) {
+    return { markup, bodyY: config.marginTop + config.bodyMarginTop + 10 }
+  }
   const titleY = config.marginTop + 30
   const [mainTitle, ...subtitles] = metadata.titles
   if (mainTitle !== undefined) {
@@ -178,7 +204,7 @@ function renderHeader(
   markup.push(...modeHeader(metadata, config, registry, infoY))
   const authorSize = config.lyricFont === 'KaiTi' ? 19 : 16
   const authorBottomY =
-    config.marginTop + 125 + titleOffset + Math.max(0, metadata.authors.length - 1) * 21
+    config.marginTop + 116 + titleOffset + Math.max(0, metadata.authors.length - 1) * 21
   ;[...metadata.authors]
     .map((author, index) => ({ author, index }))
     .reverse()
@@ -220,12 +246,10 @@ function renderGrace(
   x: number,
   y: number,
   before: boolean,
-  notepos: string,
+  id: string,
   registry: GlyphRegistry,
 ): string[] {
   if (notes.length === 0) return []
-  const prefix = before ? 'qy' : 'hy'
-  const id = `${prefix}${notepos.replaceAll('_', '-')}`
   const step = 9
   const body: string[] = []
   notes.forEach((note, index) => {
@@ -265,11 +289,33 @@ function renderGrace(
   return [registry.useDefined(id, before ? x - 12 - (notes.length - 1) * step : x + 15, y)]
 }
 
-function ornamentY(ornament: Ornament, y: number): number {
-  if (['zkh', 'ykh', 'cy', 'tr', 'yc', 'ycy', 'shy', 'xhy'].includes(ornament.name)) return y
-  if (ornament.name === 'rit') return y - 3 - ornament.level * 6
-  if (ornament.name === 'bc') return y - 17 - ornament.level * 6
-  return y - 24 - ornament.level * 6
+interface OrnamentContext {
+  hairpinStart?: boolean
+  hairpinEnd?: boolean
+  slurEnd?: boolean
+}
+
+function ornamentPosition(
+  ornament: Ornament,
+  x: number,
+  y: number,
+  context: OrnamentContext,
+): { x: number; y: number } {
+  if (DYNAMIC_ORNAMENTS.has(ornament.name)) {
+    if (context.hairpinStart === true) return { x: x - 25, y: y - 10 - ornament.level * 6 }
+    if (context.hairpinEnd === true) {
+      return {
+        x: x + 20,
+        y: y - 10 - ornament.level * 6 - (context.slurEnd === true ? 8 : 0),
+      }
+    }
+    return { x, y: y - 3 - ornament.level * 6 }
+  }
+  if (['zkh', 'ykh', 'cy', 'tr', 'yc', 'ycy', 'shy', 'xhy'].includes(ornament.name)) {
+    return { x, y }
+  }
+  if (ornament.name === 'bc') return { x, y: y - 17 - ornament.level * 6 }
+  return { x, y: y - 24 - ornament.level * 6 }
 }
 
 function renderOrnaments(
@@ -277,11 +323,32 @@ function renderOrnaments(
   x: number,
   y: number,
   registry: GlyphRegistry,
+  context: OrnamentContext = {},
 ): string[] {
   return ornaments.flatMap((ornament) => {
     const id = ornamentGlyph(ornament)
     if (id === undefined) return []
-    return [registry.use(id, x, ornamentY(ornament, y))]
+    const position = ornamentPosition(ornament, x, y, context)
+    return [registry.use(id, position.x, position.y)]
+  })
+}
+
+function renderInlineOrnaments(
+  ornaments: Ornament[],
+  x: number,
+  y: number,
+  registry: GlyphRegistry,
+): string[] {
+  return ornaments.flatMap((ornament) => {
+    const id =
+      ornament.name === 'zkh'
+        ? 'kuohu_zuo_bian'
+        : ornament.name === 'ykh'
+          ? 'kuohu_you_bian'
+          : ornamentGlyph(ornament)
+    if (id === undefined) return []
+    const position = ornamentPosition(ornament, x, y, {})
+    return registry.use(id, position.x, position.y)
   })
 }
 
@@ -294,8 +361,21 @@ function renderNote(
   registry: GlyphRegistry,
   timeOverride?: number,
   audioOverride?: string,
+  ornamentContext: OrnamentContext = {},
+  nextGraceId: (prefix: 'qy' | 'hy') => string = (prefix) =>
+    `${prefix}${notepos.replaceAll('_', '-')}`,
 ): string[] {
   const output: string[] = []
+  if (note.hidden) {
+    return [
+      registry.use('shuzi_null', x, y, {
+        time: 0,
+        audio: '',
+        notepos,
+        code: note.code,
+      }),
+    ]
+  }
   if (!note.hidden) {
     const id = note.pitch === 9 ? 'shuzi_x' : `shuzi_${config.numberStyle}_${note.pitch}`
     output.push(
@@ -320,10 +400,10 @@ function renderNote(
     for (let dot = 2; dot < note.dots; dot += 1)
       output.push(registry.use('fudian', x + 14 + (dot - 2) * 7, y))
     if (note.graceBefore !== undefined) {
-      output.push(...renderGrace(note.graceBefore, x, y, true, notepos, registry))
+      output.push(...renderGrace(note.graceBefore, x, y, true, nextGraceId('qy'), registry))
     }
     if (note.graceAfter !== undefined) {
-      output.push(...renderGrace(note.graceAfter, x, y, false, notepos, registry))
+      output.push(...renderGrace(note.graceAfter, x, y, false, nextGraceId('hy'), registry))
     }
     if (note.annotation !== undefined) {
       output.push(
@@ -336,7 +416,7 @@ function renderNote(
         }),
       )
     }
-    output.push(...renderOrnaments(note.ornaments, x, y, registry))
+    output.push(...renderOrnaments(note.ornaments, x, y, registry, ornamentContext))
   }
   return output
 }
@@ -367,20 +447,35 @@ function renderBarline(
   notepos: string,
   registry: GlyphRegistry,
 ): string[] {
-  if (barline?.type === 'hidden' || barline?.type === 'invisible') return []
-  const id = synthetic ? 'xiaojiexian_weibu' : BARLINE_GLYPH_IDS[barline?.type ?? 'normal']
-  const code = synthetic
-    ? '|w'
-    : (
-        {
-          normal: '|',
-          end: '|j',
-          double: '|s',
-          'repeat-start': '|z',
-          'repeat-end': '|y',
-          'repeat-both': '|l',
-        } as const
-      )[barline?.type ?? 'normal']
+  const normalizedCodes = {
+    normal: '|',
+    end: '|j',
+    double: '|s',
+    'repeat-start': '|z',
+    'repeat-end': '|y',
+    'repeat-both': '|l',
+    hidden: '|n',
+    invisible: '|none',
+  } as const
+  const sourceCodes = {
+    normal: '|',
+    end: '||',
+    double: '||/',
+    'repeat-start': '|:',
+    'repeat-end': ':|',
+    'repeat-both': ':|:',
+    hidden: '|/',
+    invisible: '|*',
+  } as const
+  const type = barline?.type ?? 'normal'
+  const suffix = barline === undefined ? '' : barline.code.slice(sourceCodes[type].length)
+  const code = synthetic ? '|w' : `${normalizedCodes[type]}${suffix}`
+  if (type === 'hidden' || type === 'invisible') {
+    return [
+      `<use x="${formatNumber(x)}" y="${formatNumber(y)}" xlink:href="#xiaojiexian_none" notepos="${escapeXml(notepos)}" time="0" audio="" code="${code}" xmlns:xlink="http://www.w3.org/1999/xlink"></use>`,
+    ]
+  }
+  const id = synthetic ? 'xiaojiexian_weibu' : BARLINE_GLYPH_IDS[type]
   const output = [
     registry.use(id, x, y, {
       notepos,
@@ -414,7 +509,11 @@ function renderBarline(
   return output
 }
 
-function renderUnderlines(layout: LineLayout, y: number): string[] {
+function renderUnderlines(
+  layout: LineLayout,
+  y: number,
+  yForElement: (elementIndex: number) => number = () => y,
+): string[] {
   const output: string[] = []
   const notes = layout.elements.filter(
     (positioned): positioned is PositionedElement & { element: NoteElement; beat: number } =>
@@ -424,7 +523,7 @@ function renderUnderlines(layout: LineLayout, y: number): string[] {
   )
   const groups = new Map<string, typeof notes>()
   notes.forEach((positioned) => {
-    const key = `${positioned.measure}:${positioned.beat}`
+    const key = `${positioned.measure}:${positioned.beat}:${yForElement(positioned.elementIndex)}`
     const group = groups.get(key) ?? []
     group.push(positioned)
     groups.set(key, group)
@@ -442,8 +541,9 @@ function renderUnderlines(layout: LineLayout, y: number): string[] {
         const first = run[0]
         const last = run[run.length - 1]
         if (first !== undefined && last !== undefined) {
+          const underlineY = yForElement(first.elementIndex) + 13 + (level - 1) * 3
           output.push(
-            `<line x1="${formatNumber(first.x - 6)}" y1="${formatNumber(y + 13 + (level - 1) * 3)}" x2="${formatNumber(last.x + 6 + last.element.dots * 10)}" y2="${formatNumber(y + 13 + (level - 1) * 3)}" data-type="jianshixian" stroke-width="2" stroke="${INK}"></line>`,
+            `<line x1="${formatNumber(first.x - 6)}" y1="${formatNumber(underlineY)}" x2="${formatNumber(last.x + 6 + last.element.dots * 10)}" y2="${formatNumber(underlineY)}" data-type="jianshixian" stroke-width="2" stroke="${INK}"></line>`,
           )
         }
         run = []
@@ -456,6 +556,33 @@ function renderUnderlines(layout: LineLayout, y: number): string[] {
     }
   })
   return output
+}
+
+function inlineLayerRange(
+  line: ScoreLine,
+): { start: number; end: number; closesWithinLine: boolean } | undefined {
+  const start = line.elements.findIndex(
+    (element) => element.kind === 'inline-layer' && element.role === 'voice',
+  )
+  if (start < 0) return undefined
+  const followingBarline = line.elements.findIndex(
+    (element, index) => index > start && element.kind === 'barline',
+  )
+  const end = followingBarline < 0 ? line.elements.length - 1 : followingBarline
+  const closesWithinLine = line.elements.some(
+    (element, index) => index > end && (element.kind === 'note' || element.kind === 'sustain'),
+  )
+  return { start, end, closesWithinLine }
+}
+
+function mainElementY(layout: LineLayout, elementIndex: number, y: number): number {
+  const layer = layout.inlineLayers.find(({ element }) => element.role === 'voice')
+  if (layer === undefined) return y
+  const end = layer.closingElementIndex ?? layout.line.elements.length - 1
+  return elementIndex > layer.elementIndex &&
+    (layer.closesWithinLine === true ? elementIndex < end : elementIndex <= end)
+    ? y + 28
+    : y
 }
 
 function nearestMarkX(
@@ -479,6 +606,7 @@ function renderMark(
   y: number,
   config: ResolvedPageConfig,
   registry: GlyphRegistry,
+  liftOverride?: number,
 ): string[] {
   const start = nearestMarkX(layout, mark.start, 'forward')
   const end = nearestMarkX(layout, mark.end, 'backward')
@@ -495,8 +623,30 @@ function renderMark(
     : markedElements.some((element) => element.kind === 'note' && element.octave > 0)
       ? 5
       : 0
-  const top = y - 16 - mark.level * 7 - markClearance
+  const lift = liftOverride ?? mark.level * 8
+  const top = y - 16 - lift - markClearance
   if (mark.type === 'slur' || mark.type === 'tuplet') {
+    if (mark.continuationFromPrevious === true || mark.continuationToNext === true) {
+      const flatY = y - 25.95 - lift - markClearance
+      const left = start + 12
+      const right = end - 12
+      const lineStart = mark.continuationFromPrevious === true ? config.marginLeft - 3 : left + 0.8
+      const lineEnd =
+        mark.continuationToNext === true ? config.width - config.marginRight + 4 : right + 1
+      const output: string[] = []
+      if (mark.continuationFromPrevious !== true) {
+        output.push(registry.use('lianyinxian_zuo', left, flatY))
+      }
+      if (mark.continuationToNext !== true) {
+        output.push(registry.use('lianyinxian_you', right, flatY))
+      }
+      if (lineEnd > lineStart) {
+        output.push(
+          `<line x1="${formatNumber(lineStart)}" y1="${formatNumber(flatY + 0.75)}" x2="${formatNumber(lineEnd)}" y2="${formatNumber(flatY + 0.75)}" stroke-width="1.2" stroke="${INK}" fill="none"></line>`,
+        )
+      }
+      return output
+    }
     const span = x2 - x1
     const flat =
       config.slurStyle === 'flat' ||
@@ -504,7 +654,7 @@ function renderMark(
     if (flat) {
       const left = start + 12
       const right = end - 12
-      const flatY = y - 25.95 - mark.level * 7 - markClearance
+      const flatY = y - 25.95 - lift - markClearance
       return [
         registry.use('lianyinxian_zuo', left, flatY),
         registry.use('lianyinxian_you', right, flatY),
@@ -520,27 +670,57 @@ function renderMark(
     return output
   }
   if (mark.type === 'crescendo' || mark.type === 'decrescendo') {
-    const middle = (x1 + x2) / 2
-    const leftSpread = mark.type === 'crescendo' ? 0 : 4
-    const rightSpread = mark.type === 'crescendo' ? 4 : 0
+    const left = start - 7
+    const right = end + 7
+    const middleY = y - 30 - mark.level * 5
+    const leftSpread = mark.type === 'crescendo' ? 0 : 5
+    const rightSpread = mark.type === 'crescendo' ? 5 : 0
     return [
-      `<path d="M ${formatNumber(x1)} ${formatNumber(top - leftSpread)} L ${formatNumber(middle)} ${formatNumber(top - 2)} L ${formatNumber(x2)} ${formatNumber(top - rightSpread)} M ${formatNumber(x1)} ${formatNumber(top + leftSpread)} L ${formatNumber(middle)} ${formatNumber(top + 2)} L ${formatNumber(x2)} ${formatNumber(top + rightSpread)}" fill="none" stroke="${INK}" stroke-width="1"></path>`,
+      `<line x1="${formatNumber(left)}" y1="${formatNumber(middleY - leftSpread)}" x2="${formatNumber(right)}" y2="${formatNumber(middleY - rightSpread)}" stroke-width="1" stroke="${INK}" fill="none"></line>`,
+      `<line x1="${formatNumber(left)}" y1="${formatNumber(middleY + leftSpread)}" x2="${formatNumber(right)}" y2="${formatNumber(middleY + rightSpread)}" stroke-width="1" stroke="${INK}" fill="none"></line>`,
     ]
   }
-  const voltaTop = y - 36 - mark.level * 8
-  const right = mark.openEnd === true ? '' : ` L ${formatNumber(x2)} ${formatNumber(voltaTop + 8)}`
+  const startElement = layout.line.elements[mark.start]
+  const left = start + (startElement?.kind === 'barline' && startElement.type === 'hidden' ? -6 : 2)
+  const right = end - 2
+  const voltaTop = y - 30 - mark.level * 10
   const output = [
-    `<path d="M ${formatNumber(x1)} ${formatNumber(voltaTop + 8)} L ${formatNumber(x1)} ${formatNumber(voltaTop)} L ${formatNumber(x2)} ${formatNumber(voltaTop)}${right}" fill="none" stroke="${INK}" stroke-width="1"></path>`,
+    `<line x1="${formatNumber(left)}" y1="${formatNumber(voltaTop + 10)}" x2="${formatNumber(left)}" y2="${formatNumber(voltaTop)}" stroke-width="1" stroke="${INK}" fill="none"></line>`,
+    `<line x1="${formatNumber(left)}" y1="${formatNumber(voltaTop)}" x2="${formatNumber(right)}" y2="${formatNumber(voltaTop)}" stroke-width="1" stroke="${INK}" fill="none"></line>`,
   ]
+  if (mark.openEnd !== true) {
+    output.push(
+      `<line x1="${formatNumber(right)}" y1="${formatNumber(voltaTop + 10)}" x2="${formatNumber(right)}" y2="${formatNumber(voltaTop)}" stroke-width="1" stroke="${INK}" fill="none"></line>`,
+    )
+  }
   if (mark.caption !== undefined) {
     output.push(
-      text(mark.caption, x1 + 4, voltaTop - 1, {
+      text(mark.caption, left + 3, voltaTop + 10, {
         font: 'Microsoft YaHei',
-        size: 11,
+        size: 12,
+        fill: '#303030',
+        dy: 0.3355 * 12,
+        extra: { 'xml:space': 'preserve' },
       }),
     )
   }
   return output
+}
+
+function curvedMarkLifts(marks: Mark[]): Map<Mark, number> {
+  const lifts = new Map<Mark, number>()
+  marks
+    .filter(({ type }) => type === 'slur' || type === 'tuplet')
+    .forEach((mark) => {
+      let lift = mark.level * 8
+      lifts.forEach((otherLift, other) => {
+        if (mark.start >= other.end || other.start >= mark.end) return
+        const step = mark.start === other.start && mark.end === other.end ? 5 : 8
+        lift = Math.max(lift, otherLift + step)
+      })
+      lifts.set(mark, lift)
+    })
+  return lifts
 }
 
 function renderLyrics(
@@ -576,17 +756,8 @@ function renderLyrics(
       const syllable = lyric.syllables[index]
       if (syllable?.text === '') return
       const value = syllable?.text ?? ''
-      const width =
-        syllable === undefined
-          ? config.lyricSize
-          : [...value].reduce(
-              (sum, character) =>
-                sum +
-                (/^[\x00-\x7f]$/.test(character) ? config.lyricSize * 0.55 : config.lyricSize),
-              0,
-            )
       output.push(
-        text(value, positioned.x - width / 2, lyricY, {
+        text(value, positioned.x - config.lyricSize / 2, lyricY, {
           font: config.lyricFont,
           size: config.lyricSize,
           fill: '#101010',
@@ -594,6 +765,28 @@ function renderLyrics(
           extra: { cipos: notePositionCode(pageIndex, lineOrdinal, positioned.ordinal) },
         }),
       )
+      if (syllable?.trailingPunctuation !== undefined) {
+        const characters = [...value]
+        const rightOffset = characters.reduce((sum, character, characterIndex) => {
+          const ascii = /^[\x00-\x7f]$/.test(character)
+          if (ascii) return sum + config.lyricSize * 0.25
+          return sum + config.lyricSize * (characterIndex === 0 ? 0.5 : 1)
+        }, 0)
+        const punctuationOffset = /^[\x00-\x7f]/.test(syllable.trailingPunctuation) ? 3 : 0
+        output.push(
+          text(
+            syllable.trailingPunctuation,
+            positioned.x + rightOffset + punctuationOffset,
+            lyricY,
+            {
+              font: config.lyricFont,
+              size: config.lyricSize,
+              fill: '#101010',
+              dy: 0.3355 * config.lyricSize,
+            },
+          ),
+        )
+      }
     })
   })
   return output
@@ -607,10 +800,65 @@ function renderInlineLayer(
   layer: InlineLayerElement,
   startX: number,
   y: number,
+  pageIndex: number,
   config: ResolvedPageConfig,
   registry: GlyphRegistry,
+  nextGraceId: (prefix: 'qy' | 'hy') => string,
+  layout?: LineLayout,
+  closesWithinLine = false,
 ): string[] {
   const output: string[] = []
+  if (layout !== undefined) {
+    layout.elements.forEach((positioned) => {
+      const element = positioned.element
+      if (element.kind === 'barline') return
+      if (element.kind === 'note') {
+        if (layer.role === 'voice') {
+          output.push(
+            ...renderNote(
+              element,
+              positioned.x,
+              y,
+              `${pageIndex}__`,
+              config,
+              registry,
+              undefined,
+              undefined,
+              {},
+              nextGraceId,
+            ),
+          )
+        } else if (!element.hidden) {
+          const id =
+            element.pitch === 9 ? 'shuzi_x' : `shuzi_${config.numberStyle}_bian_${element.pitch}`
+          output.push(registry.use(id, positioned.x, y))
+          output.push(...renderInlineOrnaments(element.ornaments, positioned.x, y, registry))
+        }
+      } else if (layer.role === 'voice') {
+        output.push(...renderSustain(element, positioned.x, y, `${pageIndex}__`, registry))
+      } else {
+        output.push(registry.use('yanyinfu', positioned.x, y))
+      }
+    })
+    layout.barlines.forEach((barline, index) => {
+      if (closesWithinLine && index === layout.barlines.length - 1) return
+      if (barline.element?.type === 'hidden' || barline.element?.type === 'invisible') return
+      output.push(
+        registry.use(
+          barline.synthetic
+            ? 'xiaojiexian_weibu'
+            : BARLINE_GLYPH_IDS[barline.element?.type ?? 'normal'],
+          barline.x,
+          y,
+        ),
+      )
+    })
+    output.push(...renderUnderlines(layout, y))
+    layout.line.marks.forEach((mark) =>
+      output.push(...renderMark(mark, layout, y, config, registry)),
+    )
+    return output
+  }
   let x = startX
   layer.elements.forEach((element) => {
     if (element.kind === 'note') {
@@ -622,7 +870,11 @@ function renderInlineLayer(
               ? 'shuzi_x'
               : `shuzi_${config.numberStyle}_${element.pitch}`
         output.push(registry.use(id, x, y))
-        output.push(...renderOrnaments(element.ornaments, x, y, registry))
+        output.push(
+          ...(layer.role === 'accompaniment'
+            ? renderInlineOrnaments(element.ornaments, x, y, registry)
+            : renderOrnaments(element.ornaments, x, y, registry)),
+        )
       }
       x += inlineElementStep(element)
     } else if (element.kind === 'sustain') {
@@ -647,11 +899,13 @@ function renderLine(
   registry: GlyphRegistry,
   musicToLyric: number,
   lyricToLyric: number,
+  nextGraceId: (prefix: 'qy' | 'hy') => string,
 ): string[] {
   const output: string[] = []
   const ordinals = itemOrdinals(layout.line)
   layout.elements.forEach((positioned) => {
     if (positioned.element.kind === 'barline') return
+    const elementY = mainElementY(layout, positioned.elementIndex, y)
     const ordinal = ordinals.get(positioned.elementIndex) ?? 0
     const notepos = notePositionCode(pageIndex, lineOrdinal, ordinal)
     if (positioned.element.kind === 'note') {
@@ -679,20 +933,35 @@ function renderLine(
           tieStart.octave === positioned.element.octave)
           ? '0'
           : undefined
+      const hairpinStart = layout.line.marks.some(
+        (mark) =>
+          (mark.type === 'crescendo' || mark.type === 'decrescendo') &&
+          mark.start === positioned.elementIndex,
+      )
+      const hairpinEnd = layout.line.marks.some(
+        (mark) =>
+          (mark.type === 'crescendo' || mark.type === 'decrescendo') &&
+          mark.end === positioned.elementIndex,
+      )
+      const slurEnd = layout.line.marks.some(
+        (mark) => mark.type === 'slur' && mark.end === positioned.elementIndex,
+      )
       output.push(
         ...renderNote(
           positioned.element,
           positioned.x,
-          y,
+          elementY,
           notepos,
           config,
           registry,
           timeOverride,
           audioOverride,
+          { hairpinStart, hairpinEnd, slurEnd },
+          nextGraceId,
         ),
       )
     } else {
-      output.push(...renderSustain(positioned.element, positioned.x, y, notepos, registry))
+      output.push(...renderSustain(positioned.element, positioned.x, elementY, notepos, registry))
     }
   })
 
@@ -707,20 +976,76 @@ function renderLine(
         barline.element,
         barline.synthetic,
         barline.x,
-        y,
+        barline.elementIndex === undefined ? y : mainElementY(layout, barline.elementIndex, y),
         notePositionCode(pageIndex, lineOrdinal, ordinal),
         registry,
       ),
     )
   })
-  output.push(...renderUnderlines(layout, y))
-  layout.line.marks.forEach((mark) => output.push(...renderMark(mark, layout, y, config, registry)))
   output.push(
-    ...renderLyrics(layout, pageIndex, lineOrdinal, y, config, musicToLyric, lyricToLyric),
+    ...renderUnderlines(layout, y, (elementIndex) => mainElementY(layout, elementIndex, y)),
   )
-  layout.inlineLayers.forEach(({ element, x }) => {
-    output.push(...renderInlineLayer(element, x, y - 38, config, registry))
-  })
+  const markLifts = curvedMarkLifts(layout.line.marks)
+  layout.line.marks.forEach((mark) =>
+    output.push(
+      ...renderMark(
+        mark,
+        layout,
+        mainElementY(layout, mark.start, y),
+        config,
+        registry,
+        markLifts.get(mark),
+      ),
+    ),
+  )
+  output.push(
+    ...renderLyrics(
+      layout,
+      pageIndex,
+      lineOrdinal,
+      y + (inlineLayerRange(layout.line) === undefined ? 0 : 28),
+      config,
+      musicToLyric,
+      lyricToLyric,
+    ),
+  )
+  layout.inlineLayers.forEach(
+    ({
+      element,
+      x,
+      layout: inlineLayout,
+      braceStartX,
+      braceEndX,
+      closesWithinLine,
+      fullHeightRightBrace,
+    }) => {
+      output.push(
+        ...renderInlineLayer(
+          element,
+          x,
+          y + (element.role === 'accompaniment' ? -40 : -28),
+          pageIndex,
+          config,
+          registry,
+          nextGraceId,
+          inlineLayout,
+          closesWithinLine,
+        ),
+      )
+      if (braceStartX !== undefined) {
+        output.push(registry.use('dakuohu_zuo_2', braceStartX, y))
+      }
+      if (braceEndX !== undefined) {
+        output.push(
+          registry.use(
+            fullHeightRightBrace === true ? 'dakuohu_you_2' : 'dakuohu_you_',
+            braceEndX,
+            y,
+          ),
+        )
+      }
+    },
+  )
   return output
 }
 
@@ -735,7 +1060,24 @@ function rowAdvance(
       : spacing.musicToLyric +
         line.lyrics.length * config.lyricSize +
         Math.max(0, line.lyrics.length * spacing.lyricToLyric - 10)
-  return 35 + lyricHeight + spacing.lineGap
+  const temporaryVoiceBottom = inlineLayerRange(line) === undefined ? 0 : 28
+  const musicHeight = line.lyrics.length === 0 ? 38 : 35
+  return musicHeight + lyricHeight + spacing.lineGap + temporaryVoiceBottom
+}
+
+function lineTopPadding(line: ScoreLine): number {
+  const symbolPadding = line.marks.some(
+    ({ type }) => type === 'volta' || type === 'crescendo' || type === 'decrescendo',
+  )
+    ? 12
+    : 0
+  const layerPadding = Math.max(
+    0,
+    ...line.elements.flatMap((element) =>
+      element.kind === 'inline-layer' ? [element.role === 'accompaniment' ? 40 : 28] : [],
+    ),
+  )
+  return Math.max(symbolPadding, layerPadding)
 }
 
 function renderPage(
@@ -753,6 +1095,8 @@ function renderPage(
   const spacing = pageSpacing(config, page.index + 1)
   let y = header.bodyY
   let lineOrdinal = 1
+  let graceOrdinal = 0
+  const nextGraceId = (prefix: 'qy' | 'hy'): string => `${prefix}${graceOrdinal++}_${page.index}`
 
   page.groups.forEach((group) => {
     const multiVoice = group.voices.length > 1
@@ -762,10 +1106,12 @@ function renderPage(
     )
     const startX = config.marginLeft + (multiVoice ? 23 : 3) + captionWidth
     const layout = layoutVoiceGroup(group, startX, config.width - config.marginRight + 3)
-    const firstY = y
+    let firstY = y
     let lastY = y
     layout.lines.forEach((lineLayout, index) => {
       const scoreLine = lineLayout.line
+      y += lineTopPadding(scoreLine)
+      if (index === 0) firstY = y
       if (multiVoice) {
         body.push(
           text(scoreLine.caption ?? '', startX - 35, y, {
@@ -787,6 +1133,7 @@ function renderPage(
           registry,
           spacing.musicToLyric,
           spacing.lyricToLyric,
+          nextGraceId,
         ),
       )
       lineOrdinal += 1
@@ -795,7 +1142,11 @@ function renderPage(
       if (index === layout.lines.length - 1) return
     })
     if (multiVoice) {
-      const braceX = startX
+      const braceX =
+        layout.lines
+          .flatMap((line) => line.barlines)
+          .find((barline) => barline.element?.ornaments.some(({ name }) => name === 'sbf'))?.x ??
+        startX
       body.push(registry.use('shengbufu_shang', braceX, firstY))
       body.push(
         `<line x1="${formatNumber(braceX - 25.5)}" y1="${formatNumber(firstY - 6.5)}" x2="${formatNumber(braceX - 25.5)}" y2="${formatNumber(lastY + 6.5)}" stroke-width="4" stroke="${INK}" fill="none"></line>`,

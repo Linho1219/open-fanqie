@@ -29,6 +29,8 @@ export interface Metadata {
   mode?: string
   meters: Meter[]
   tempos: Tempo[]
+  instruments: string[]
+  remarks: string[]
 }
 
 export type Accidental = 'sharp' | 'flat' | 'natural'
@@ -111,11 +113,14 @@ export interface Mark {
   level: number
   caption?: string
   openEnd?: boolean
+  continuationFromPrevious?: boolean
+  continuationToNext?: boolean
   source: SourceLocation
 }
 
 export interface LyricSyllable {
   text: string
+  trailingPunctuation?: string
   source: SourceLocation
 }
 

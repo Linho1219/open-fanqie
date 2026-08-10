@@ -24,9 +24,16 @@ Q: (y1/ 2/ 3/ 4/ 5/ 6/) | (y1/ 2/ 3/ 4/ 5/ 6/ 7/) |
 Q: (y1/ 2/ 3/ 4/ 5/ 6/ 7/ 1/) | (y1/ 2/ 3/ 4/ 5/ 6/ 7/ 1/ 2/) |
 Q: (1 2 |
 Q: 3 4) |
+Q: 1 2 | {dsb 6, - } 2 - | 3 4 |
+Q: 1 2 {dsb 6, - } 2 - | 3 4 |
+Q: 1 2 | {bz 3&zkh 4&ykh } 5 6 | 7 1 |
 `
 
 const probes = [
+  {
+    code: 'Q: 1 2 {dsb 6, - } 2 - | 3 4 |',
+    pageConfig: '{}',
+  },
   ...['a', 'b', 'c'].map((numberStyle) => ({
     code: coreProbe,
     pageConfig: JSON.stringify({ shuzi_font: numberStyle }),
@@ -58,6 +65,15 @@ function staticGroups(svg) {
 const glyphs = new Map()
 for (const probe of probes) {
   for (const [id, markup] of staticGroups(await draw(probe))) glyphs.set(id, markup)
+}
+
+// The legacy response references this right brace without emitting its def.
+// It is the same two-staff outline as the paired right brace.
+if (!glyphs.has('dakuohu_you_') && glyphs.has('dakuohu_you_2')) {
+  glyphs.set(
+    'dakuohu_you_',
+    glyphs.get('dakuohu_you_2').replace('id="dakuohu_you_2"', 'id="dakuohu_you_"'),
+  )
 }
 
 const output = Object.fromEntries([...glyphs].sort(([left], [right]) => left.localeCompare(right)))

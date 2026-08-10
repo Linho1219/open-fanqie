@@ -81,6 +81,7 @@ function parseInput(
   if (typeof input !== 'string') return input
   try {
     const parsed: unknown = JSON.parse(input)
+    if (parsed === null) return {}
     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
       return parsed as Partial<LegacyPageConfig>
     }
