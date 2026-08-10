@@ -59,7 +59,7 @@ export interface SustainElement {
   kind: "sustain";
   duration: 4;
   ornaments: Ornament[];
-  code: "-";
+  code: string;
   source: SourceLocation;
 }
 
@@ -187,4 +187,3 @@ export interface RenderOptions {
   pageNum?: number;
   onDiagnostics?: (diagnostics: readonly Diagnostic[]) => void;
 }
-

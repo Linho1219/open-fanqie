@@ -55,7 +55,7 @@ Q: 1 - ||
       dots: 2,
       accidental: "sharp",
       ornaments: [{ name: "yc", level: 0 }],
-      code: "1'#//..",
+      code: "1'#//..&yc",
     });
     expect(elements[1]).toMatchObject({ kind: "note", hidden: true });
     expect(elements[2]).toMatchObject({ kind: "note", pitch: 9, sound: "rhythm", octave: -1 });

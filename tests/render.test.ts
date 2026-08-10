@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 
 import { render } from "../src";
+
+const compatibilityScore = readFileSync(new URL("./fixtures/test.jps", import.meta.url), "utf8");
 
 function uses(svg: string, line: number): Array<{ x: number; code: string }> {
   const expression = new RegExp(
@@ -13,7 +16,72 @@ function uses(svg: string, line: number): Array<{ x: number; code: string }> {
   }));
 }
 
+function elementCount(svg: string, name: "use" | "text" | "line" | "path"): number {
+  const body = svg.replace(/<defs>[\s\S]*?<\/defs>/, "");
+  return body.match(new RegExp(`<${name}\\b`, "g"))?.length ?? 0;
+}
+
 describe("render", () => {
+  it("renders the full compatibility score without diagnostics", () => {
+    const diagnostics: string[] = [];
+    const output = render(compatibilityScore, {
+      onDiagnostics: (items) => diagnostics.push(...items.map(({ code }) => code)),
+    });
+    const pages = output.split("[fenye]").filter(Boolean);
+
+    expect(diagnostics).toEqual([]);
+    expect(pages).toHaveLength(3);
+    expect(pages[0]).toContain(">时　忆</text>");
+    expect(pages[0]).toContain('<g id="changyinfu1"');
+    expect(pages[2]).toContain('<g id="yanchang"');
+    expect(pages[1]).not.toContain(">时　忆</text>");
+    expect(pages.map((page) => [
+      elementCount(page, "use"),
+      elementCount(page, "text"),
+      elementCount(page, "line"),
+      elementCount(page, "path"),
+    ])).toEqual([
+      [391, 141, 68, 11],
+      [692, 359, 203, 10],
+      [603, 276, 141, 20],
+    ]);
+    expect(pages[0]).toContain('x="141" y="266" xlink:href="#shuzi_b_0"');
+    expect(pages[1]).toContain('x="103" y="130" xlink:href="#shuzi_b_6"');
+    expect(pages[2]).toContain('x="103" y="130" xlink:href="#shuzi_b_0"');
+  });
+
+  it("matches legacy page-setting interactions", () => {
+    const svg = render(`
+B: 标题
+Z: 甲
+Z: 乙
+J: 80
+Q1: (y1/ 2/ 3/) |
+C1: 一二三
+Q2: 1 |
+C2: 一
+
+Q1: 1 |
+C1: 一
+Q2: 1 |
+C2: 一
+`, {
+      pageConfig: {
+        biaoti_size: 24,
+        geci_font: "KaiTi",
+        body_margin_top: 27,
+        height_shengbu: 27,
+        lianyinxian_type: 2,
+      },
+    });
+
+    expect(svg).toContain('font-size="19" font-family="KaiTi">甲</text>');
+    expect(svg).toContain('font-size="19" font-family="KaiTi">乙</text>');
+    expect(svg).toContain('xlink:href="#lianyinxian_zuo"');
+    expect(svg).not.toContain('<g id="lianyin_shuzi_3"');
+    expect(svg).not.toContain('<path d="M ');
+  });
+
   it("matches the observed legacy spacing constants", () => {
     const svg = render(`
 Q: 1 2 3 4 |
@@ -61,6 +129,19 @@ Q2: 1/ 2/ |
       { x: 103, code: "1/" },
       { x: 128, code: "2/" },
       { x: 213, code: "|" },
+    ]);
+  });
+
+  it("keeps short multi-measure phrases at their natural width", () => {
+    const svg = render(`Q: 1 2 | 3 4 |`);
+
+    expect(uses(svg, 1)).toEqual([
+      { x: 83, code: "1" },
+      { x: 120.5, code: "2" },
+      { x: 190.5, code: "3" },
+      { x: 228, code: "4" },
+      { x: 155.5, code: "|" },
+      { x: 263, code: "|" },
     ]);
   });
 

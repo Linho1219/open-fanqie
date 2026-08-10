@@ -9,10 +9,11 @@ const coreProbe = `V: 1.0
 B: glyph probe
 D: A
 P: 0/1 2/3 4/5 6/7 8/9
+J: 80
 Q: 0 1 2 3 4 5 6 7 8 9 - |
 Q: 1# 2$ 3= 4' 5'' 6, 7,, 1. 2.. |
 Q: 1[0/1/2/3/4/5/6/7/] 1[h0/1/2/3/4/5/6/7/] |
-Q: 1&zkh 1&ykh 1&yc 1&bc 1&zy 1&dy 1&hx 1&shy 1&xhy 1&sby 1&sby+ 1&xby 1&xby+ 1&cy 1&cy+ |
+Q: 1&zkh 1&ykh 1&yc 1&ycy 1&bc 1&zy 1&dy 1&hx 1&shy 1&xhy 1&sby 1&sby+ 1&xby 1&xby+ 1&cy 1&cy+ 1&tr |
 Q: 1&ppp 1&pp 1&p 1&mp 1&mf 1&f 1&ff 1&fff 1&cresc 1&dim 1&sf 1&fp 1&sfp 1&atempo 1&rit |
 Q: 1 |&fine 2 |&dc 3 |&ds 4 |&ty 5 |&hs 6 || 7 ||/ 1 |: 2 :| 3 :|:
 Q1: 1 |
@@ -21,6 +22,8 @@ Q: |"p:0/1" 1 |"p:2/3" 2 |"p:4/5" 3 |"p:6/7" 4 |"p:8/9" 5
 Q: (y1/ 2/) | (y1/ 2/ 3/) | (y1/ 2/ 3/ 4/) | (y1/ 2/ 3/ 4/ 5/) |
 Q: (y1/ 2/ 3/ 4/ 5/ 6/) | (y1/ 2/ 3/ 4/ 5/ 6/ 7/) |
 Q: (y1/ 2/ 3/ 4/ 5/ 6/ 7/ 1/) | (y1/ 2/ 3/ 4/ 5/ 6/ 7/ 1/ 2/) |
+Q: (1 2 |
+Q: 3 4) |
 `;
 
 const probes = [

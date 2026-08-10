@@ -143,7 +143,8 @@ export function pageSpacing(
     musicToLyric: finiteNumber(values[1], config.musicToLyric),
     lyricToLyric: finiteNumber(values[2], config.lyricToLyric),
     lineGap: finiteNumber(values[3], config.lineGap),
-    voiceGap: finiteNumber(values[4], config.voiceGap),
+    // The legacy backend stores a fifth per-page value but only applies the
+    // global voice-group gap.
+    voiceGap: config.voiceGap,
   };
 }
-

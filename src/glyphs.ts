@@ -7,6 +7,7 @@ export const ORNAMENT_GLYPH_IDS: Readonly<Record<string, string>> = {
   zkh: "kuohu_zuo",
   ykh: "kuohu_you",
   yc: "yanchang",
+  ycy: "yanchang",
   bc: "baochifu",
   zy: "zhongyinfu",
   dy: "dunyinfu",
@@ -16,6 +17,7 @@ export const ORNAMENT_GLYPH_IDS: Readonly<Record<string, string>> = {
   sby: "boyinfu_shang1",
   xby: "boyinfu_xia1",
   cy: "changyinfu1",
+  tr: "changyinfu1",
   ppp: "lidu_ppp",
   pp: "lidu_pp",
   p: "lidu_p",
@@ -66,13 +68,13 @@ export function escapeXml(value: string): string {
 }
 
 export function formatNumber(value: number): string {
-  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(4)));
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(11)));
 }
 
 function attributes(values: Readonly<Record<string, string | number | undefined>>): string {
   return Object.entries(values)
     .filter((entry): entry is [string, string | number] => entry[1] !== undefined)
-    .map(([name, value]) => `${name}="${escapeXml(String(value))}"`)
+    .map(([name, value]) => `${name}="${name === "code" ? String(value) : escapeXml(String(value))}"`)
     .join(" ");
 }
 

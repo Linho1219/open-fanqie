@@ -44,13 +44,19 @@ function text(
     anchor?: "start" | "middle" | "end";
     bold?: boolean;
     italic?: boolean;
+    fill?: string;
+    dy?: number;
+    extra?: Readonly<Record<string, string | number>>;
   },
 ): string {
   const style = [
     options.bold === true ? "font-weight:bold" : "",
     options.italic === true ? "font-style:italic" : "",
   ].filter(Boolean).join(";");
-  return `<text x="${formatNumber(x)}" y="${formatNumber(y)}" dy="${formatNumber(FONT_SIZE_FIX * options.size)}"${options.anchor === undefined || options.anchor === "start" ? "" : ` text-anchor="${options.anchor}"`} fill="${INK}"${style === "" ? "" : ` style="${style};"`} font-size="${formatNumber(options.size)}" font-family="${escapeXml(options.font)}">${escapeXml(value)}</text>`;
+  const extra = options.extra === undefined
+    ? ""
+    : Object.entries(options.extra).map(([name, item]) => ` ${name}="${escapeXml(String(item))}"`).join("");
+  return `<text x="${formatNumber(x)}" y="${formatNumber(y)}" dy="${formatNumber(options.dy ?? FONT_SIZE_FIX * options.size)}"${options.anchor === undefined || options.anchor === "start" ? "" : ` text-anchor="${options.anchor}"`} fill="${options.fill ?? INK}"${style === "" ? "" : ` style="${style};"`} font-size="${formatNumber(options.size)}" font-family="${escapeXml(options.font)}"${extra}>${escapeXml(value)}</text>`;
 }
 
 function durationTime(note: NoteElement): number {
@@ -61,6 +67,13 @@ function durationTime(note: NoteElement): number {
     fraction /= 2;
   }
   return (4 / note.duration) * multiplier;
+}
+
+function audioCode(note: NoteElement): string {
+  const octave = note.octave > 0
+    ? "'".repeat(note.octave)
+    : ",".repeat(Math.abs(note.octave));
+  return `${note.pitch}${octave}`;
 }
 
 function modeHeader(
@@ -95,10 +108,22 @@ function modeHeader(
   }
 
   metadata.tempos.forEach((tempo, index) => {
-    output.push(text(String(tempo), config.marginLeft, y + 28 + index * 18, {
-      font: config.titleFont,
-      size: 15,
-    }));
+    const tempoY = y + 40 + index * 22;
+    if (typeof tempo === "number") {
+      output.push(registry.use("jiepaifu", config.marginLeft, tempoY));
+      output.push(text(String(tempo), config.marginLeft + 32, tempoY + 1, {
+        font: config.lyricFont,
+        size: 16,
+        dy: 0.3355 * 16,
+        extra: { "data-jiepai": tempo },
+      }));
+    } else {
+      output.push(text(tempo, config.marginLeft, tempoY, {
+        font: config.lyricFont,
+        size: 16,
+        dy: 0.3355 * 16,
+      }));
+    }
   });
   return output;
 }
@@ -120,28 +145,29 @@ function renderHeader(
     }));
   }
   subtitles.forEach((subtitle, index) => {
-    markup.push(text(subtitle, config.width / 2, titleY + config.titleSize + index * (config.subtitleSize + 8), {
+    markup.push(text(subtitle, config.width / 2, titleY + config.titleSize + 20 + index * (config.subtitleSize + 8), {
       font: config.titleFont,
       size: config.subtitleSize,
       anchor: "middle",
     }));
   });
-  metadata.authors.forEach((author, index) => {
-    markup.push(text(author, config.width - config.marginRight, titleY + config.titleSize + index * (config.subtitleSize + 6), {
-      font: config.titleFont,
-      size: config.subtitleSize,
+  const titleOffset = config.titleSize - 36;
+  const infoY = config.marginTop + 96 + titleOffset;
+  markup.push(...modeHeader(metadata, config, registry, infoY));
+  const authorSize = config.lyricFont === "KaiTi" ? 19 : 16;
+  const authorBottomY = config.marginTop + 125 + titleOffset + Math.max(0, metadata.authors.length - 1) * 21;
+  [...metadata.authors].map((author, index) => ({ author, index })).reverse().forEach(({ author, index }) => {
+    const authorY = authorBottomY - (metadata.authors.length - 1 - index) * (authorSize + 5);
+    markup.push(text(author, config.width - config.marginRight, authorY, {
+      font: config.lyricFont,
+      size: authorSize,
       anchor: "end",
+      dy: -0.1645 * authorSize,
     }));
   });
-
-  const extraTitles = Math.max(0, subtitles.length - 1) * (config.subtitleSize + 8);
-  const infoY = metadata.titles.length > 0
-    ? titleY + 66 + extraTitles
-    : config.marginTop + 30;
-  markup.push(...modeHeader(metadata, config, registry, infoY));
   return {
     markup,
-    bodyY: infoY + config.bodyMarginTop + 20,
+    bodyY: infoY + config.bodyMarginTop + 20 + (metadata.tempos.length > 0 ? 30 : 0),
   };
 }
 
@@ -202,7 +228,8 @@ function renderGrace(
 }
 
 function ornamentY(ornament: Ornament, y: number): number {
-  if (ornament.name === "zkh" || ornament.name === "ykh") return y;
+  if (["zkh", "ykh", "cy", "tr", "yc", "ycy", "shy", "xhy"].includes(ornament.name)) return y;
+  if (ornament.name === "rit") return y - 3 - ornament.level * 6;
   if (ornament.name === "bc") return y - 17 - ornament.level * 6;
   return y - 24 - ornament.level * 6;
 }
@@ -227,26 +254,32 @@ function renderNote(
   notepos: string,
   config: ResolvedPageConfig,
   registry: GlyphRegistry,
+  timeOverride?: number,
+  audioOverride?: string,
 ): string[] {
   const output: string[] = [];
   if (!note.hidden) {
     const id = note.pitch === 9 ? "shuzi_x" : `shuzi_${config.numberStyle}_${note.pitch}`;
     output.push(registry.use(id, x, y, {
-      time: formatNumber(durationTime(note)),
-      audio: note.pitch,
+      time: formatNumber(timeOverride ?? durationTime(note)),
+      audio: audioOverride ?? audioCode(note),
       notepos,
       code: note.code,
     }));
     if (note.accidental !== undefined) {
-      output.push(registry.use(ACCIDENTAL_GLYPH_IDS[note.accidental], x - 10, y));
+      output.push(registry.use(ACCIDENTAL_GLYPH_IDS[note.accidental], x, y));
     }
     const dotId = note.octave >= 0 ? "yingao_gao" : "yingao_di";
+    const underlineCount = Math.max(0, Math.log2(note.duration / 4));
     for (let octave = 0; octave < Math.abs(note.octave); octave += 1) {
-      output.push(registry.use(dotId, x, y + (note.octave > 0 ? -17 - octave * 4 : 17 + octave * 4)));
+      const octaveY = note.octave > 0
+        ? y - octave * 6
+        : y + 1 + underlineCount * 4 + octave * 6;
+      output.push(registry.use(dotId, x + (note.pitch === 4 ? 2.5 : 0), octaveY));
     }
-    if (note.dots >= 2) output.push(registry.use("fudian2", x + 10, y));
-    else if (note.dots === 1) output.push(registry.use("fudian", x + 10, y));
-    for (let dot = 2; dot < note.dots; dot += 1) output.push(registry.use("fudian", x + 16 + (dot - 2) * 4, y));
+    if (note.dots >= 2) output.push(registry.use("fudian2", x, y));
+    else if (note.dots === 1) output.push(registry.use("fudian", x, y));
+    for (let dot = 2; dot < note.dots; dot += 1) output.push(registry.use("fudian", x + 14 + (dot - 2) * 7, y));
     if (note.graceBefore !== undefined) {
       output.push(...renderGrace(note.graceBefore, x, y, true, notepos, registry));
     }
@@ -254,10 +287,12 @@ function renderNote(
       output.push(...renderGrace(note.graceAfter, x, y, false, notepos, registry));
     }
     if (note.annotation !== undefined) {
-      output.push(text(note.annotation, x, y - 35, {
-        font: config.titleFont,
-        size: 14,
-        anchor: "middle",
+      output.push(text(note.annotation, x - 6, y - 24, {
+        font: config.lyricFont,
+        size: 12,
+        fill: "#303030",
+        dy: 0.3355 * 12,
+        extra: { "xml:space": "preserve" },
       }));
     }
     output.push(...renderOrnaments(note.ornaments, x, y, registry));
@@ -295,7 +330,16 @@ function renderBarline(
   const id = synthetic
     ? "xiaojiexian_weibu"
     : BARLINE_GLYPH_IDS[barline?.type ?? "normal"];
-  const code = synthetic ? "|w" : barline?.code ?? "|";
+  const code = synthetic
+    ? "|w"
+    : ({
+        normal: "|",
+        end: "|j",
+        double: "|s",
+        "repeat-start": "|z",
+        "repeat-end": "|y",
+        "repeat-both": "|l",
+      } as const)[barline?.type ?? "normal"];
   const output = [registry.use(id, x, y, {
     notepos,
     time: 0,
@@ -343,7 +387,7 @@ function renderUnderlines(layout: LineLayout, y: number): string[] {
         const first = run[0];
         const last = run[run.length - 1];
         if (first !== undefined && last !== undefined) {
-          output.push(`<line x1="${formatNumber(first.x - 6)}" y1="${formatNumber(y + 13 + (level - 1) * 3)}" x2="${formatNumber(last.x + 6)}" y2="${formatNumber(y + 13 + (level - 1) * 3)}" data-type="jianshixian" stroke-width="2" stroke="${INK}"></line>`);
+          output.push(`<line x1="${formatNumber(first.x - 6)}" y1="${formatNumber(y + 13 + (level - 1) * 3)}" x2="${formatNumber(last.x + 6 + last.element.dots * 10)}" y2="${formatNumber(y + 13 + (level - 1) * 3)}" data-type="jianshixian" stroke-width="2" stroke="${INK}"></line>`);
         }
         run = [];
       };
@@ -376,15 +420,33 @@ function renderMark(
   const start = nearestMarkX(layout, mark.start, "forward");
   const end = nearestMarkX(layout, mark.end, "backward");
   if (start === undefined || end === undefined) return [];
-  const x1 = start - 7;
-  const x2 = end + 7;
-  const top = y - 20 - mark.level * 7;
+  const x1 = start + 1;
+  const x2 = end - 1;
+  const markedElements = layout.line.elements.slice(mark.start, mark.end + 1);
+  const markClearance = markedElements.some((element) =>
+    (element.kind === "note" && element.ornaments.some(({ name }) => name === "yc" || name === "ycy"))
+  )
+    ? 7
+    : markedElements.some((element) => element.kind === "note" && element.octave > 0) ? 5 : 0;
+  const top = y - 16 - mark.level * 7 - markClearance;
   if (mark.type === "slur" || mark.type === "tuplet") {
-    const flat = config.slurStyle === "flat";
-    const path = flat
-      ? `M ${formatNumber(x1)} ${formatNumber(top)} L ${formatNumber((x1 + x2) / 2)} ${formatNumber(top - 4)} L ${formatNumber(x2)} ${formatNumber(top)}`
-      : `M ${formatNumber(x1)} ${formatNumber(top)} Q ${formatNumber((x1 + x2) / 2)} ${formatNumber(top - 14)} ${formatNumber(x2)} ${formatNumber(top)}`;
-    const output = [`<path d="${path}" fill="none" stroke="${INK}" stroke-width="1.2"></path>`];
+    const span = x2 - x1;
+    const flat = config.slurStyle === "flat" || (
+      mark.type === "slur" && config.slurStyle === "auto" && end - start > 100
+    );
+    if (flat) {
+      const left = start + 12;
+      const right = end - 12;
+      const flatY = y - 25.95 - mark.level * 7 - markClearance;
+      return [
+        registry.use("lianyinxian_zuo", left, flatY),
+        registry.use("lianyinxian_you", right, flatY),
+        `<line x1="${formatNumber(left + 0.8)}" y1="${formatNumber(flatY + 0.75)}" x2="${formatNumber(right + 1)}" y2="${formatNumber(flatY + 0.75)}" stroke-width="1.2" stroke="${INK}" fill="none"></line>`,
+      ];
+    }
+    const control = span * 0.3 - 0.4;
+    const path = `M ${formatNumber(x1)},${formatNumber(top)} C ${formatNumber(x1 + control)},${formatNumber(top - 10)},${formatNumber(x2 - control)},${formatNumber(top - 10)},${formatNumber(x2)},${formatNumber(top)} M ${formatNumber(x2)},${formatNumber(top)} C  ${formatNumber(x2 - control)},${formatNumber(top - 9)},${formatNumber(x1 + control)},${formatNumber(top - 9)},${formatNumber(x1)},${formatNumber(top)}`;
+    const output = [`<path d="${path}" stroke-width="0.5" stroke="${INK}"></path>`];
     if (mark.type === "tuplet" && mark.caption !== undefined && /^[2-9]$/.test(mark.caption)) {
       output.push(registry.use(`lianyin_shuzi_${mark.caption}`, (x1 + x2) / 2, top - 7));
     }
@@ -412,33 +474,47 @@ function renderMark(
 
 function renderLyrics(
   layout: LineLayout,
+  pageIndex: number,
+  lineOrdinal: number,
   y: number,
   config: ResolvedPageConfig,
   musicToLyric: number,
   lyricToLyric: number,
 ): string[] {
   const output: string[] = [];
+  const ordinals = itemOrdinals(layout.line);
   const notePositions = layout.line.elements.flatMap((element, index) => {
     if (element.kind !== "note") return [];
     const x = layout.xByElement.get(index);
-    return x === undefined ? [] : [x];
+    return x === undefined ? [] : [{ x, ordinal: ordinals.get(index) ?? 0 }];
   });
   layout.line.lyrics.forEach((lyric, lyricIndex) => {
-    const lyricY = y + 21 + musicToLyric + lyricIndex * (config.lyricSize + lyricToLyric);
+    const lyricY = y + 25 + musicToLyric + lyricIndex * (config.lyricSize + lyricToLyric);
     if (lyric.annotation !== undefined) {
-      output.push(text(lyric.annotation, (notePositions[0] ?? config.marginLeft) - 10, lyricY, {
+      output.push(text(lyric.annotation, (notePositions[0]?.x ?? config.marginLeft) - 10, lyricY, {
         font: config.lyricFont,
         size: config.lyricSize,
         anchor: "end",
+        fill: "#101010",
+        dy: 0.3355 * config.lyricSize,
       }));
     }
-    lyric.syllables.forEach((syllable, index) => {
-      const x = notePositions[index];
-      if (x === undefined || syllable.text === "") return;
-      output.push(text(syllable.text, x, lyricY, {
+    notePositions.forEach((positioned, index) => {
+      const syllable = lyric.syllables[index];
+      if (syllable?.text === "") return;
+      const value = syllable?.text ?? "";
+      const width = syllable === undefined
+        ? config.lyricSize
+        : [...value].reduce(
+            (sum, character) => sum + (/^[\x00-\x7f]$/.test(character) ? config.lyricSize * 0.55 : config.lyricSize),
+            0,
+          );
+      output.push(text(value, positioned.x - width / 2, lyricY, {
         font: config.lyricFont,
         size: config.lyricSize,
-        anchor: "middle",
+        fill: "#101010",
+        dy: 0.3355 * config.lyricSize,
+        extra: { cipos: notePositionCode(pageIndex, lineOrdinal, positioned.ordinal) },
       }));
     });
   });
@@ -500,7 +576,36 @@ function renderLine(
     const ordinal = ordinals.get(positioned.elementIndex) ?? 0;
     const notepos = notePositionCode(pageIndex, lineOrdinal, ordinal);
     if (positioned.element.kind === "note") {
-      output.push(...renderNote(positioned.element, positioned.x, y, notepos, config, registry));
+      const tuplet = layout.line.marks.find((mark) =>
+        mark.type === "tuplet" &&
+        positioned.elementIndex >= mark.start && positioned.elementIndex <= mark.end
+      );
+      const count = Number(tuplet?.caption);
+      const normalCount = Number.isFinite(count) && count >= 3
+        ? 2 ** Math.floor(Math.log2(count - 1))
+        : count;
+      const timeOverride = tuplet === undefined || !Number.isFinite(normalCount)
+        ? undefined
+        : Number((durationTime(positioned.element) * normalCount / count).toFixed(2));
+      const tie = layout.line.marks.find((mark) =>
+        mark.type === "slur" && mark.end === positioned.elementIndex
+      );
+      const tieStart = tie === undefined ? undefined : layout.line.elements[tie.start];
+      const audioOverride = tieStart?.kind === "sustain" || (
+        tieStart?.kind === "note" &&
+        tieStart.pitch === positioned.element.pitch &&
+        tieStart.octave === positioned.element.octave
+      ) ? "0" : undefined;
+      output.push(...renderNote(
+        positioned.element,
+        positioned.x,
+        y,
+        notepos,
+        config,
+        registry,
+        timeOverride,
+        audioOverride,
+      ));
     } else {
       output.push(...renderSustain(positioned.element, positioned.x, y, notepos, registry));
     }
@@ -522,7 +627,7 @@ function renderLine(
   });
   output.push(...renderUnderlines(layout, y));
   layout.line.marks.forEach((mark) => output.push(...renderMark(mark, layout, y, config, registry)));
-  output.push(...renderLyrics(layout, y, config, musicToLyric, lyricToLyric));
+  output.push(...renderLyrics(layout, pageIndex, lineOrdinal, y, config, musicToLyric, lyricToLyric));
   layout.inlineLayers.forEach(({ element, x }) => {
     output.push(...renderInlineLayer(element, x, y - 38, config, registry));
   });
@@ -533,14 +638,13 @@ function rowAdvance(
   line: ScoreLine,
   config: ResolvedPageConfig,
   spacing: ReturnType<typeof pageSpacing>,
-  multiVoice: boolean,
 ): number {
   const lyricHeight = line.lyrics.length === 0
     ? 0
     : spacing.musicToLyric +
       line.lyrics.length * config.lyricSize +
-      Math.max(0, line.lyrics.length - 1) * spacing.lyricToLyric;
-  return 38 + lyricHeight + spacing.lineGap + (multiVoice ? spacing.voiceGap : 0);
+      Math.max(0, line.lyrics.length * spacing.lyricToLyric - 10);
+  return 35 + lyricHeight + spacing.lineGap;
 }
 
 function renderPage(
@@ -550,7 +654,9 @@ function renderPage(
   customCode: string,
 ): string {
   const registry = new GlyphRegistry();
-  const header = renderHeader(metadata, config, registry);
+  const header = page.index === 0
+    ? renderHeader(metadata, config, registry)
+    : { markup: [], bodyY: config.marginTop + config.bodyMarginTop + 10 };
   const body: string[] = [...header.markup];
   const spacing = pageSpacing(config, page.index + 1);
   let y = header.bodyY;
@@ -558,17 +664,20 @@ function renderPage(
 
   page.groups.forEach((group) => {
     const multiVoice = group.voices.length > 1;
-    const startX = config.marginLeft + (multiVoice ? 23 : 3);
-    const layout = layoutVoiceGroup(group, startX);
+    const captionWidth = Math.max(0, ...group.voices.map((voice) => [...voice.caption ?? ""].length * 19));
+    const startX = config.marginLeft + (multiVoice ? 23 : 3) + captionWidth;
+    const layout = layoutVoiceGroup(group, startX, config.width - config.marginRight + 3);
     const firstY = y;
     let lastY = y;
     layout.lines.forEach((lineLayout, index) => {
       const scoreLine = lineLayout.line;
-      if (scoreLine.caption !== undefined) {
-        body.push(text(scoreLine.caption, startX - 14, y, {
-          font: config.titleFont,
-          size: 13,
+      if (multiVoice) {
+        body.push(text(scoreLine.caption ?? "", startX - 35, y, {
+          font: config.lyricFont,
+          size: config.lyricSize,
           anchor: "end",
+          fill: "#101010",
+          dy: 0.3355 * config.lyricSize,
         }));
       }
       body.push(...renderLine(
@@ -583,15 +692,17 @@ function renderPage(
       ));
       lineOrdinal += 1;
       lastY = y;
-      y += rowAdvance(scoreLine, config, spacing, multiVoice);
+      y += rowAdvance(scoreLine, config, spacing);
       if (index === layout.lines.length - 1) return;
     });
     if (multiVoice) {
-      const braceX = config.marginLeft + 4;
+      const braceX = startX;
       body.push(registry.use("shengbufu_shang", braceX, firstY));
-      body.push(`<line x1="${formatNumber(braceX - 10)}" y1="${formatNumber(firstY - 6)}" x2="${formatNumber(braceX - 10)}" y2="${formatNumber(lastY + 6)}" stroke="${INK}" stroke-width="1.5"></line>`);
+      body.push(`<line x1="${formatNumber(braceX - 25.5)}" y1="${formatNumber(firstY - 6.5)}" x2="${formatNumber(braceX - 25.5)}" y2="${formatNumber(lastY + 6.5)}" stroke-width="4" stroke="${INK}" fill="none"></line>`);
+      body.push(`<line x1="${formatNumber(braceX - 21)}" y1="${formatNumber(firstY - 8)}" x2="${formatNumber(braceX - 21)}" y2="${formatNumber(lastY + 8)}" stroke-width="2" stroke="${INK}" fill="none"></line>`);
       body.push(registry.use("shengbufu_xia", braceX, lastY));
     }
+    if (multiVoice) y += spacing.voiceGap;
   });
 
   return `<svg width="${formatNumber(config.width)}" height="${formatNumber(config.height)}" version="1.1" viewBox="0 0 ${formatNumber(config.width)} ${formatNumber(config.height)}" encoding="UTF-8" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" height="100%" width="100%" fill="#ffffff"></rect>${registry.definitions()}\n${body.join("\n")}\n<g id="custom">${customCode}</g></svg>`;

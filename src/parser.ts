@@ -39,6 +39,7 @@ const KNOWN_NOTE_COMMANDS = new Set([
   "atempo",
   "rit",
   "yc",
+  "ycy",
   "bc",
   "zy",
   "dy",
@@ -48,6 +49,7 @@ const KNOWN_NOTE_COMMANDS = new Set([
   "sby",
   "xby",
   "cy",
+  "tr",
   "sbf",
 ]);
 
@@ -285,6 +287,7 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
   const curvedMarks: OpenMark[] = [];
   const dynamicMarks: OpenMark[] = [];
   const voltaMarks: OpenMark[] = [];
+  const pendingCurvedCodes: string[] = [];
   let cursor = 0;
 
   while (cursor < source.length) {
@@ -297,6 +300,10 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
 
     if (isNoteDigit(char)) {
       const parsed = createNote(source, cursor, context, 4);
+      if (pendingCurvedCodes.length > 0) {
+        const insertion = pendingCurvedCodes.splice(0).join("");
+        parsed.note.code = `${parsed.note.code.slice(0, 1)}${insertion}${parsed.note.code.slice(1)}`;
+      }
       elements.push(parsed.note);
       cursor = parsed.next;
       continue;
@@ -310,6 +317,7 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
         code: "-",
         source: location(context, cursor),
       };
+      if (pendingCurvedCodes.length > 0) sustain.code += pendingCurvedCodes.splice(0).join("");
       elements.push(sustain);
       cursor += 1;
       continue;
@@ -343,9 +351,18 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
       const tuplet = source[cursor + 1] === "y";
       let next = cursor + (tuplet ? 2 : 1);
       while (source[next] === "+") next += 1;
+      const previousIndex = lastAttachableIndex(elements);
+      const previous = previousIndex === undefined ? undefined : elements[previousIndex];
+      const code = tuplet ? "(ys" : "(";
+      let contentIndex = next;
+      while (/\s/.test(source[contentIndex] ?? "")) contentIndex += 1;
+      const startsAtPrevious = !tuplet && source[contentIndex] === "-" &&
+        (previous?.kind === "note" || previous?.kind === "sustain");
+      if (startsAtPrevious) previous.code += code;
+      else pendingCurvedCodes.push(code);
       curvedMarks.push({
         type: tuplet ? "tuplet" : "slur",
-        start: elements.length,
+        start: startsAtPrevious && previousIndex !== undefined ? previousIndex : elements.length,
         level: next - cursor - (tuplet ? 2 : 1),
         sourceIndex: cursor,
       });
@@ -359,6 +376,8 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
       if (open === undefined || end === undefined) {
         report(context, "unmatched-mark-end", "Unmatched ')' mark terminator.", cursor);
       } else {
+        const attachable = elements[end];
+        if (attachable?.kind === "note" || attachable?.kind === "sustain") attachable.code += ")";
         marks.push(closeMark(open, end, cursor, context, elements));
       }
       cursor += 1;
@@ -519,6 +538,7 @@ function parseMusicLine(source: string, context: ParseContext): ParsedMusicLine 
         attachable?.kind === "barline"
       ) {
         attachable.ornaments.push({ name, level: pluses });
+        attachable.code += commandMatch[0];
         if (!known) {
           report(context, "unknown-command", `Unknown command '&${rawName}'.`, cursor, commandMatch[0].length);
         }

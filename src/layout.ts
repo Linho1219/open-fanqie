@@ -10,6 +10,7 @@ import type {
 export const PLAIN_NOTE_STEP = 37.5;
 export const UNDERLINED_NOTE_STEP = 25;
 export const BARLINE_GAP = 35;
+const FINAL_SYMBOL_WIDTH = 14;
 
 type TimedElement = NoteElement | SustainElement;
 
@@ -17,7 +18,6 @@ interface AnalyzedItem {
   element: TimedElement;
   elementIndex: number;
   beat: number;
-  localX: number;
 }
 
 interface AnalyzedBarline {
@@ -90,6 +90,36 @@ function targetSpacing(element: TimedElement): number {
     : PLAIN_NOTE_STEP;
 }
 
+function withinBeatTrailingWidth(element: TimedElement): number {
+  if (element.kind !== "note") return 0;
+  return element.dots * (PLAIN_NOTE_STEP - UNDERLINED_NOTE_STEP) +
+    (element.ornaments.some(({ name }) => name === "xhy" || name === "shy") ? 7.5 : 0);
+}
+
+function leadingWidth(
+  element: TimedElement,
+  atBeatStart = false,
+  previous?: TimedElement,
+): number {
+  if (element.kind !== "note") return 0;
+  return (element.accidental === undefined ? 0 : 5) +
+    (!atBeatStart && element.duration === 8 && previous?.kind === "note" && previous.duration === 8
+      ? element.dots * (PLAIN_NOTE_STEP - UNDERLINED_NOTE_STEP)
+      : 0);
+}
+
+function withinBeatSpacing(previous: TimedElement, current: TimedElement): number {
+  return Math.max(targetSpacing(previous), targetSpacing(current)) +
+    withinBeatTrailingWidth(previous) + leadingWidth(current, false, previous);
+}
+
+function beatTerminalWidth(items: AnalyzedItem[]): number {
+  const last = items[items.length - 1];
+  if (last === undefined) return 0;
+  return withinBeatTrailingWidth(last.element) +
+    (items.some(({ element }) => element.kind === "note" && element.accidental !== undefined) ? 5 : 0);
+}
+
 function analyzeLine(line: ScoreLine): AnalyzedLine {
   const measures: AnalyzedMeasure[] = [];
   const inlineLayers: AnalyzedLine["inlineLayers"] = [];
@@ -99,6 +129,20 @@ function analyzeLine(line: ScoreLine): AnalyzedLine {
   let previousNaturalBeat: number | undefined;
   let nextBoundary: "join" | "split" | undefined;
   let endedWithBarline = false;
+  const tupletScales = new Map<number, number>();
+
+  line.marks.filter(({ type }) => type === "tuplet").forEach((mark) => {
+    const timedIndices = line.elements.flatMap((element, elementIndex) =>
+      elementIndex >= mark.start && elementIndex <= mark.end &&
+      (element.kind === "note" || element.kind === "sustain")
+        ? [elementIndex]
+        : []
+    );
+    const count = timedIndices.length;
+    if (count < 3) return;
+    const normalCount = 2 ** Math.floor(Math.log2(count - 1));
+    timedIndices.forEach((elementIndex) => tupletScales.set(elementIndex, normalCount / count));
+  });
 
   const closeMeasure = (
     barline: AnalyzedBarline,
@@ -138,11 +182,9 @@ function analyzeLine(line: ScoreLine): AnalyzedLine {
     while (beats.length <= currentBeat) beats.push([]);
     const items = beats[currentBeat];
     if (items === undefined) return;
-    const previous = items[items.length - 1];
-    const localX = previous === undefined ? 0 : previous.localX + targetSpacing(element);
-    items.push({ element, elementIndex, beat: currentBeat, localX });
+    items.push({ element, elementIndex, beat: currentBeat });
     previousNaturalBeat = naturalBeat;
-    time += durationInQuarterNotes(element);
+    time += durationInQuarterNotes(element) * (tupletScales.get(elementIndex) ?? 1);
     nextBoundary = undefined;
   });
 
@@ -153,17 +195,16 @@ function analyzeLine(line: ScoreLine): AnalyzedLine {
   return { line, measures, inlineLayers };
 }
 
-function beatLastX(measure: AnalyzedMeasure | undefined, beat: number): number | undefined {
-  const items = measure?.beats[beat];
-  return items?.[items.length - 1]?.localX;
-}
-
 /**
  * Lay out a voice group using the original renderer's two observed spacing units.
  * Voices share measure and beat starts, while their notes remain left-aligned
  * inside each beat.
  */
-export function layoutVoiceGroup(group: VoiceGroup, startX: number): VoiceGroupLayout {
+export function layoutVoiceGroup(
+  group: VoiceGroup,
+  startX: number,
+  maximumX = Number.POSITIVE_INFINITY,
+): VoiceGroupLayout {
   const analyzed = group.voices.map(analyzeLine);
   const lineLayouts: LineLayout[] = analyzed.map(({ line }) => ({
     line,
@@ -182,25 +223,58 @@ export function layoutVoiceGroup(group: VoiceGroup, startX: number): VoiceGroupL
       ...analyzed.map(({ measures }) => measures[measureIndex]?.beats.length ?? 0),
     );
     const beatStarts: number[] = [];
-    const beatLastPositions: number[] = [];
+    const beatColumns: number[][] = [];
     let nextBeatStart = 0;
 
     for (let beatIndex = 0; beatIndex < beatCount; beatIndex += 1) {
       beatStarts.push(nextBeatStart);
-      const last = Math.max(
+      const voiceItems = analyzed.map(({ measures }) => measures[measureIndex]?.beats[beatIndex] ?? []);
+      const itemCount = Math.max(0, ...voiceItems.map((items) => items.length));
+      const columns = itemCount === 0
+        ? []
+        : [Math.max(
+            0,
+            ...voiceItems.flatMap((items) => {
+              const first = items[0];
+              return first === undefined ? [] : [leadingWidth(first.element, true)];
+            }),
+          )];
+      for (let itemIndex = 1; itemIndex < itemCount; itemIndex += 1) {
+        const step = Math.max(
+          0,
+          ...voiceItems.flatMap((items) => {
+            const previous = items[itemIndex - 1]?.element;
+            const current = items[itemIndex]?.element;
+            return previous === undefined || current === undefined
+              ? []
+              : [withinBeatSpacing(previous, current)];
+          }),
+        );
+        columns.push((columns[itemIndex - 1] ?? 0) + step);
+      }
+      beatColumns.push(columns);
+
+      const lastColumn = columns[columns.length - 1] ?? 0;
+      const terminalWidth = Math.max(
         0,
-        ...analyzed.map(({ measures }) =>
-          beatLastX(measures[measureIndex], beatIndex) ?? 0
-        ),
+        ...voiceItems.map(beatTerminalWidth),
       );
-      beatLastPositions.push(last);
-      nextBeatStart += last + PLAIN_NOTE_STEP;
+      nextBeatStart += lastColumn + PLAIN_NOTE_STEP + terminalWidth;
     }
 
     const lastBeat = beatCount - 1;
     const barRelativeX = beatCount === 0
       ? 0
-      : (beatStarts[lastBeat] ?? 0) + (beatLastPositions[lastBeat] ?? 0) + BARLINE_GAP;
+      : (beatStarts[lastBeat] ?? 0) +
+        (beatColumns[lastBeat]?.[beatColumns[lastBeat].length - 1] ?? 0) +
+        BARLINE_GAP +
+        Math.max(
+          0,
+          ...analyzed.flatMap(({ measures }) => {
+            const items = measures[measureIndex]?.beats[lastBeat] ?? [];
+            return items.length === 0 ? [] : [beatTerminalWidth(items)];
+          }),
+        );
     const barX = measureStart + barRelativeX;
 
     analyzed.forEach((analysis, lineIndex) => {
@@ -209,8 +283,8 @@ export function layoutVoiceGroup(group: VoiceGroup, startX: number): VoiceGroupL
       if (output === undefined || measure === undefined) return;
       measure.beats.forEach((items, beatIndex) => {
         const beatStart = beatStarts[beatIndex] ?? 0;
-        items.forEach((item) => {
-          const x = measureStart + beatStart + item.localX;
+        items.forEach((item, itemIndex) => {
+          const x = measureStart + beatStart + (beatColumns[beatIndex]?.[itemIndex] ?? 0);
           output.elements.push({
             element: item.element,
             elementIndex: item.elementIndex,
@@ -265,6 +339,43 @@ export function layoutVoiceGroup(group: VoiceGroup, startX: number): VoiceGroupL
     });
     output.elements.sort((left, right) => left.elementIndex - right.elementIndex);
   });
+
+  const availableWidth = maximumX - startX;
+  const naturalWidth = endX - startX;
+  const fillRatio = naturalWidth / availableWidth;
+  const shouldFitLine = endX > maximumX || naturalWidth >= 700 ||
+    (measureCount > 1 && fillRatio >= 0.7);
+  if (shouldFitLine && Number.isFinite(maximumX) && endX !== maximumX && endX > startX) {
+    // The legacy renderer reserves one reduced-note unit plus the 14 px width
+    // of the closing symbol, then pins that final barline to the right edge.
+    const scale = (maximumX - startX + FINAL_SYMBOL_WIDTH) /
+      (endX - startX + UNDERLINED_NOTE_STEP);
+    const compress = (x: number): number => startX + (x - startX) * scale;
+    lineLayouts.forEach((layout) => {
+      layout.elements.forEach((positioned) => {
+        positioned.x = compress(positioned.x);
+      });
+      layout.barlines.forEach((barline) => {
+        barline.x = compress(barline.x);
+      });
+      layout.inlineLayers.forEach((layer) => {
+        layer.x = compress(layer.x);
+      });
+      layout.xByElement.forEach((x, index) => {
+        layout.xByElement.set(index, compress(x));
+      });
+      layout.barlines.filter(({ measure }) => measure === measureCount - 1).forEach((barline) => {
+        barline.x = maximumX;
+        if (barline.elementIndex !== undefined) layout.xByElement.set(barline.elementIndex, maximumX);
+      });
+      layout.elements.filter((positioned) =>
+        positioned.measure === measureCount - 1 && positioned.element.kind === "barline"
+      ).forEach((positioned) => {
+        positioned.x = maximumX;
+      });
+    });
+    endX = maximumX;
+  }
 
   return { lines: lineLayouts, endX };
 }
