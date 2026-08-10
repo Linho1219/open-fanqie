@@ -1,6 +1,6 @@
-export { parse } from "./parser";
-export { render } from "./renderer";
-export { DEFAULT_PAGE_CONFIG } from "./config";
+export { parse } from './parser'
+export { render } from './renderer'
+export { DEFAULT_PAGE_CONFIG } from './config'
 export type {
   Accidental,
   BarlineElement,
@@ -26,6 +26,6 @@ export type {
   SourceLocation,
   SustainElement,
   VoiceGroup,
-} from "./types";
+} from './types'
 
-export const VERSION = "0.1.0";
+export const VERSION = '0.1.0'

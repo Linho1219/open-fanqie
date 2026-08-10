@@ -42,34 +42,28 @@
   </div>
 </div>
 <script>
-  if (midiPlay.instrumentState != "ready") {
-    midiPlay.init();
+  if (midiPlay.instrumentState != 'ready') {
+    midiPlay.init()
   }
 
-  var playJiepai = $("svg text[data-jiepai]").attr("data-jiepai");
+  var playJiepai = $('svg text[data-jiepai]').attr('data-jiepai')
   if (parseFloat(playJiepai)) {
-    playJiepai = Math.round(playJiepai / 10) * 10;
+    playJiepai = Math.round(playJiepai / 10) * 10
   } else {
-    playJiepai = 90;
+    playJiepai = 90
   }
-  setSelectOptionByDisplayValue(
-    document.getElementById("speed"),
-    playJiepai + "拍/分钟"
-  );
+  setSelectOptionByDisplayValue(document.getElementById('speed'), playJiepai + '拍/分钟')
 
   function setSelectOptionByDisplayValue(selectElement, displayValue) {
     for (var i = 0; i < selectElement.options.length; i++) {
       if (selectElement.options[i].text === displayValue) {
-        selectElement.options[i].selected = true;
-        break;
+        selectElement.options[i].selected = true
+        break
       }
     }
   }
-  $(".mask").fadeOut(500);
+  $('.mask').fadeOut(500)
   setTimeout(function () {
-    $(".win").animate(
-      { left: $(window).width() - 500, top: $(window).height() - 200 },
-      500
-    );
-  }, 10);
+    $('.win').animate({ left: $(window).width() - 500, top: $(window).height() - 200 }, 500)
+  }, 10)
 </script>

@@ -5,194 +5,201 @@ import type {
   ScoreLine,
   SustainElement,
   VoiceGroup,
-} from "./types";
+} from './types'
 
-export const PLAIN_NOTE_STEP = 37.5;
-export const UNDERLINED_NOTE_STEP = 25;
-export const BARLINE_GAP = 35;
-const FINAL_SYMBOL_WIDTH = 14;
+export const PLAIN_NOTE_STEP = 37.5
+export const UNDERLINED_NOTE_STEP = 25
+export const BARLINE_GAP = 35
+const FINAL_SYMBOL_WIDTH = 14
 
-type TimedElement = NoteElement | SustainElement;
+type TimedElement = NoteElement | SustainElement
 
 interface AnalyzedItem {
-  element: TimedElement;
-  elementIndex: number;
-  beat: number;
+  element: TimedElement
+  elementIndex: number
+  beat: number
 }
 
 interface AnalyzedBarline {
-  element?: BarlineElement;
-  elementIndex?: number;
-  synthetic: boolean;
+  element?: BarlineElement
+  elementIndex?: number
+  synthetic: boolean
 }
 
 interface AnalyzedMeasure {
-  beats: AnalyzedItem[][];
-  barline: AnalyzedBarline;
+  beats: AnalyzedItem[][]
+  barline: AnalyzedBarline
 }
 
 interface AnalyzedLine {
-  line: ScoreLine;
-  measures: AnalyzedMeasure[];
-  inlineLayers: Array<{ element: InlineLayerElement; elementIndex: number }>;
+  line: ScoreLine
+  measures: AnalyzedMeasure[]
+  inlineLayers: Array<{ element: InlineLayerElement; elementIndex: number }>
 }
 
 export interface PositionedElement {
-  element: TimedElement | BarlineElement;
-  elementIndex: number;
-  measure: number;
-  beat?: number;
-  x: number;
+  element: TimedElement | BarlineElement
+  elementIndex: number
+  measure: number
+  beat?: number
+  x: number
 }
 
 export interface PositionedBarline {
-  element?: BarlineElement;
-  elementIndex?: number;
-  measure: number;
-  synthetic: boolean;
-  x: number;
+  element?: BarlineElement
+  elementIndex?: number
+  measure: number
+  synthetic: boolean
+  x: number
 }
 
 export interface PositionedInlineLayer {
-  element: InlineLayerElement;
-  elementIndex: number;
-  x: number;
+  element: InlineLayerElement
+  elementIndex: number
+  x: number
 }
 
 export interface LineLayout {
-  line: ScoreLine;
-  elements: PositionedElement[];
-  barlines: PositionedBarline[];
-  inlineLayers: PositionedInlineLayer[];
-  xByElement: Map<number, number>;
+  line: ScoreLine
+  elements: PositionedElement[]
+  barlines: PositionedBarline[]
+  inlineLayers: PositionedInlineLayer[]
+  xByElement: Map<number, number>
 }
 
 export interface VoiceGroupLayout {
-  lines: LineLayout[];
-  endX: number;
+  lines: LineLayout[]
+  endX: number
 }
 
 function durationInQuarterNotes(element: TimedElement): number {
-  if (element.kind === "sustain") return 1;
-  const base = 4 / element.duration;
-  let multiplier = 1;
-  let fraction = 0.5;
+  if (element.kind === 'sustain') return 1
+  const base = 4 / element.duration
+  let multiplier = 1
+  let fraction = 0.5
   for (let dot = 0; dot < element.dots; dot += 1) {
-    multiplier += fraction;
-    fraction /= 2;
+    multiplier += fraction
+    fraction /= 2
   }
-  return base * multiplier;
+  return base * multiplier
 }
 
 function targetSpacing(element: TimedElement): number {
-  return element.kind === "note" && element.duration > 4
-    ? UNDERLINED_NOTE_STEP
-    : PLAIN_NOTE_STEP;
+  return element.kind === 'note' && element.duration > 4 ? UNDERLINED_NOTE_STEP : PLAIN_NOTE_STEP
 }
 
 function withinBeatTrailingWidth(element: TimedElement): number {
-  if (element.kind !== "note") return 0;
-  return element.dots * (PLAIN_NOTE_STEP - UNDERLINED_NOTE_STEP) +
-    (element.ornaments.some(({ name }) => name === "xhy" || name === "shy") ? 7.5 : 0);
+  if (element.kind !== 'note') return 0
+  return (
+    element.dots * (PLAIN_NOTE_STEP - UNDERLINED_NOTE_STEP) +
+    (element.ornaments.some(({ name }) => name === 'xhy' || name === 'shy') ? 7.5 : 0)
+  )
 }
 
-function leadingWidth(
-  element: TimedElement,
-  atBeatStart = false,
-  previous?: TimedElement,
-): number {
-  if (element.kind !== "note") return 0;
-  return (element.accidental === undefined ? 0 : 5) +
-    (!atBeatStart && element.duration === 8 && previous?.kind === "note" && previous.duration === 8
+function leadingWidth(element: TimedElement, atBeatStart = false, previous?: TimedElement): number {
+  if (element.kind !== 'note') return 0
+  return (
+    (element.accidental === undefined ? 0 : 5) +
+    (!atBeatStart && element.duration === 8 && previous?.kind === 'note' && previous.duration === 8
       ? element.dots * (PLAIN_NOTE_STEP - UNDERLINED_NOTE_STEP)
-      : 0);
+      : 0)
+  )
 }
 
 function withinBeatSpacing(previous: TimedElement, current: TimedElement): number {
-  return Math.max(targetSpacing(previous), targetSpacing(current)) +
-    withinBeatTrailingWidth(previous) + leadingWidth(current, false, previous);
+  return (
+    Math.max(targetSpacing(previous), targetSpacing(current)) +
+    withinBeatTrailingWidth(previous) +
+    leadingWidth(current, false, previous)
+  )
 }
 
 function beatTerminalWidth(items: AnalyzedItem[]): number {
-  const last = items[items.length - 1];
-  if (last === undefined) return 0;
-  return withinBeatTrailingWidth(last.element) +
-    (items.some(({ element }) => element.kind === "note" && element.accidental !== undefined) ? 5 : 0);
+  const last = items[items.length - 1]
+  if (last === undefined) return 0
+  return (
+    withinBeatTrailingWidth(last.element) +
+    (items.some(({ element }) => element.kind === 'note' && element.accidental !== undefined)
+      ? 5
+      : 0)
+  )
 }
 
 function analyzeLine(line: ScoreLine): AnalyzedLine {
-  const measures: AnalyzedMeasure[] = [];
-  const inlineLayers: AnalyzedLine["inlineLayers"] = [];
-  let beats: AnalyzedItem[][] = [];
-  let beat = -1;
-  let time = 0;
-  let previousNaturalBeat: number | undefined;
-  let nextBoundary: "join" | "split" | undefined;
-  let endedWithBarline = false;
-  const tupletScales = new Map<number, number>();
+  const measures: AnalyzedMeasure[] = []
+  const inlineLayers: AnalyzedLine['inlineLayers'] = []
+  let beats: AnalyzedItem[][] = []
+  let beat = -1
+  let time = 0
+  let previousNaturalBeat: number | undefined
+  let nextBoundary: 'join' | 'split' | undefined
+  let endedWithBarline = false
+  const tupletScales = new Map<number, number>()
 
-  line.marks.filter(({ type }) => type === "tuplet").forEach((mark) => {
-    const timedIndices = line.elements.flatMap((element, elementIndex) =>
-      elementIndex >= mark.start && elementIndex <= mark.end &&
-      (element.kind === "note" || element.kind === "sustain")
-        ? [elementIndex]
-        : []
-    );
-    const count = timedIndices.length;
-    if (count < 3) return;
-    const normalCount = 2 ** Math.floor(Math.log2(count - 1));
-    timedIndices.forEach((elementIndex) => tupletScales.set(elementIndex, normalCount / count));
-  });
+  line.marks
+    .filter(({ type }) => type === 'tuplet')
+    .forEach((mark) => {
+      const timedIndices = line.elements.flatMap((element, elementIndex) =>
+        elementIndex >= mark.start &&
+        elementIndex <= mark.end &&
+        (element.kind === 'note' || element.kind === 'sustain')
+          ? [elementIndex]
+          : [],
+      )
+      const count = timedIndices.length
+      if (count < 3) return
+      const normalCount = 2 ** Math.floor(Math.log2(count - 1))
+      timedIndices.forEach((elementIndex) => tupletScales.set(elementIndex, normalCount / count))
+    })
 
-  const closeMeasure = (
-    barline: AnalyzedBarline,
-  ): void => {
-    measures.push({ beats, barline });
-    beats = [];
-    beat = -1;
-    time = 0;
-    previousNaturalBeat = undefined;
-    nextBoundary = undefined;
-  };
-
-  line.elements.forEach((element, elementIndex) => {
-    if (element.kind === "beat-boundary") {
-      nextBoundary = element.behavior;
-      return;
-    }
-    if (element.kind === "inline-layer") {
-      inlineLayers.push({ element, elementIndex });
-      return;
-    }
-    if (element.kind === "barline") {
-      closeMeasure({ element, elementIndex, synthetic: false });
-      endedWithBarline = true;
-      return;
-    }
-
-    endedWithBarline = false;
-    const naturalBeat = Math.floor(time + 1e-9);
-    const beginsBeat = beat < 0 ||
-      nextBoundary === "split" ||
-      (nextBoundary !== "join" &&
-        previousNaturalBeat !== undefined &&
-        naturalBeat !== previousNaturalBeat);
-    if (beginsBeat) beat += 1;
-    const currentBeat = Math.max(0, beat);
-    while (beats.length <= currentBeat) beats.push([]);
-    const items = beats[currentBeat];
-    if (items === undefined) return;
-    items.push({ element, elementIndex, beat: currentBeat });
-    previousNaturalBeat = naturalBeat;
-    time += durationInQuarterNotes(element) * (tupletScales.get(elementIndex) ?? 1);
-    nextBoundary = undefined;
-  });
-
-  if (!endedWithBarline || measures.length === 0) {
-    closeMeasure({ synthetic: true });
+  const closeMeasure = (barline: AnalyzedBarline): void => {
+    measures.push({ beats, barline })
+    beats = []
+    beat = -1
+    time = 0
+    previousNaturalBeat = undefined
+    nextBoundary = undefined
   }
 
-  return { line, measures, inlineLayers };
+  line.elements.forEach((element, elementIndex) => {
+    if (element.kind === 'beat-boundary') {
+      nextBoundary = element.behavior
+      return
+    }
+    if (element.kind === 'inline-layer') {
+      inlineLayers.push({ element, elementIndex })
+      return
+    }
+    if (element.kind === 'barline') {
+      closeMeasure({ element, elementIndex, synthetic: false })
+      endedWithBarline = true
+      return
+    }
+
+    endedWithBarline = false
+    const naturalBeat = Math.floor(time + 1e-9)
+    const beginsBeat =
+      beat < 0 ||
+      nextBoundary === 'split' ||
+      (nextBoundary !== 'join' &&
+        previousNaturalBeat !== undefined &&
+        naturalBeat !== previousNaturalBeat)
+    if (beginsBeat) beat += 1
+    const currentBeat = Math.max(0, beat)
+    while (beats.length <= currentBeat) beats.push([])
+    const items = beats[currentBeat]
+    if (items === undefined) return
+    items.push({ element, elementIndex, beat: currentBeat })
+    previousNaturalBeat = naturalBeat
+    time += durationInQuarterNotes(element) * (tupletScales.get(elementIndex) ?? 1)
+    nextBoundary = undefined
+  })
+
+  if (!endedWithBarline || measures.length === 0) {
+    closeMeasure({ synthetic: true })
+  }
+
+  return { line, measures, inlineLayers }
 }
 
 /**
@@ -205,177 +212,184 @@ export function layoutVoiceGroup(
   startX: number,
   maximumX = Number.POSITIVE_INFINITY,
 ): VoiceGroupLayout {
-  const analyzed = group.voices.map(analyzeLine);
+  const analyzed = group.voices.map(analyzeLine)
   const lineLayouts: LineLayout[] = analyzed.map(({ line }) => ({
     line,
     elements: [],
     barlines: [],
     inlineLayers: [],
     xByElement: new Map(),
-  }));
-  const measureCount = Math.max(0, ...analyzed.map(({ measures }) => measures.length));
-  let measureStart = startX;
-  let endX = startX;
+  }))
+  const measureCount = Math.max(0, ...analyzed.map(({ measures }) => measures.length))
+  let measureStart = startX
+  let endX = startX
 
   for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
     const beatCount = Math.max(
       0,
       ...analyzed.map(({ measures }) => measures[measureIndex]?.beats.length ?? 0),
-    );
-    const beatStarts: number[] = [];
-    const beatColumns: number[][] = [];
-    let nextBeatStart = 0;
+    )
+    const beatStarts: number[] = []
+    const beatColumns: number[][] = []
+    let nextBeatStart = 0
 
     for (let beatIndex = 0; beatIndex < beatCount; beatIndex += 1) {
-      beatStarts.push(nextBeatStart);
-      const voiceItems = analyzed.map(({ measures }) => measures[measureIndex]?.beats[beatIndex] ?? []);
-      const itemCount = Math.max(0, ...voiceItems.map((items) => items.length));
-      const columns = itemCount === 0
-        ? []
-        : [Math.max(
-            0,
-            ...voiceItems.flatMap((items) => {
-              const first = items[0];
-              return first === undefined ? [] : [leadingWidth(first.element, true)];
-            }),
-          )];
+      beatStarts.push(nextBeatStart)
+      const voiceItems = analyzed.map(
+        ({ measures }) => measures[measureIndex]?.beats[beatIndex] ?? [],
+      )
+      const itemCount = Math.max(0, ...voiceItems.map((items) => items.length))
+      const columns =
+        itemCount === 0
+          ? []
+          : [
+              Math.max(
+                0,
+                ...voiceItems.flatMap((items) => {
+                  const first = items[0]
+                  return first === undefined ? [] : [leadingWidth(first.element, true)]
+                }),
+              ),
+            ]
       for (let itemIndex = 1; itemIndex < itemCount; itemIndex += 1) {
         const step = Math.max(
           0,
           ...voiceItems.flatMap((items) => {
-            const previous = items[itemIndex - 1]?.element;
-            const current = items[itemIndex]?.element;
+            const previous = items[itemIndex - 1]?.element
+            const current = items[itemIndex]?.element
             return previous === undefined || current === undefined
               ? []
-              : [withinBeatSpacing(previous, current)];
+              : [withinBeatSpacing(previous, current)]
           }),
-        );
-        columns.push((columns[itemIndex - 1] ?? 0) + step);
+        )
+        columns.push((columns[itemIndex - 1] ?? 0) + step)
       }
-      beatColumns.push(columns);
+      beatColumns.push(columns)
 
-      const lastColumn = columns[columns.length - 1] ?? 0;
-      const terminalWidth = Math.max(
-        0,
-        ...voiceItems.map(beatTerminalWidth),
-      );
-      nextBeatStart += lastColumn + PLAIN_NOTE_STEP + terminalWidth;
+      const lastColumn = columns[columns.length - 1] ?? 0
+      const terminalWidth = Math.max(0, ...voiceItems.map(beatTerminalWidth))
+      nextBeatStart += lastColumn + PLAIN_NOTE_STEP + terminalWidth
     }
 
-    const lastBeat = beatCount - 1;
-    const barRelativeX = beatCount === 0
-      ? 0
-      : (beatStarts[lastBeat] ?? 0) +
-        (beatColumns[lastBeat]?.[beatColumns[lastBeat].length - 1] ?? 0) +
-        BARLINE_GAP +
-        Math.max(
-          0,
-          ...analyzed.flatMap(({ measures }) => {
-            const items = measures[measureIndex]?.beats[lastBeat] ?? [];
-            return items.length === 0 ? [] : [beatTerminalWidth(items)];
-          }),
-        );
-    const barX = measureStart + barRelativeX;
+    const lastBeat = beatCount - 1
+    const barRelativeX =
+      beatCount === 0
+        ? 0
+        : (beatStarts[lastBeat] ?? 0) +
+          (beatColumns[lastBeat]?.[beatColumns[lastBeat].length - 1] ?? 0) +
+          BARLINE_GAP +
+          Math.max(
+            0,
+            ...analyzed.flatMap(({ measures }) => {
+              const items = measures[measureIndex]?.beats[lastBeat] ?? []
+              return items.length === 0 ? [] : [beatTerminalWidth(items)]
+            }),
+          )
+    const barX = measureStart + barRelativeX
 
     analyzed.forEach((analysis, lineIndex) => {
-      const output = lineLayouts[lineIndex];
-      const measure = analysis.measures[measureIndex];
-      if (output === undefined || measure === undefined) return;
+      const output = lineLayouts[lineIndex]
+      const measure = analysis.measures[measureIndex]
+      if (output === undefined || measure === undefined) return
       measure.beats.forEach((items, beatIndex) => {
-        const beatStart = beatStarts[beatIndex] ?? 0;
+        const beatStart = beatStarts[beatIndex] ?? 0
         items.forEach((item, itemIndex) => {
-          const x = measureStart + beatStart + (beatColumns[beatIndex]?.[itemIndex] ?? 0);
+          const x = measureStart + beatStart + (beatColumns[beatIndex]?.[itemIndex] ?? 0)
           output.elements.push({
             element: item.element,
             elementIndex: item.elementIndex,
             measure: measureIndex,
             beat: beatIndex,
             x,
-          });
-          output.xByElement.set(item.elementIndex, x);
-        });
-      });
-      const barline = measure.barline;
+          })
+          output.xByElement.set(item.elementIndex, x)
+        })
+      })
+      const barline = measure.barline
       output.barlines.push({
         measure: measureIndex,
         synthetic: barline.synthetic,
         x: barX,
         ...(barline.element === undefined ? {} : { element: barline.element }),
         ...(barline.elementIndex === undefined ? {} : { elementIndex: barline.elementIndex }),
-      });
+      })
       if (barline.element !== undefined && barline.elementIndex !== undefined) {
         output.elements.push({
           element: barline.element,
           elementIndex: barline.elementIndex,
           measure: measureIndex,
           x: barX,
-        });
-        output.xByElement.set(barline.elementIndex, barX);
+        })
+        output.xByElement.set(barline.elementIndex, barX)
       }
-    });
+    })
 
     const closures = analyzed
       .map(({ measures }) => measures[measureIndex]?.barline.element)
-      .filter((barline): barline is BarlineElement => barline !== undefined);
-    const zeroWidthHiddenBar = beatCount === 0 &&
-      closures.length > 0 &&
-      closures.every(({ type }) => type === "hidden");
-    endX = barX;
-    if (!zeroWidthHiddenBar) measureStart = barX + BARLINE_GAP;
+      .filter((barline): barline is BarlineElement => barline !== undefined)
+    const zeroWidthHiddenBar =
+      beatCount === 0 && closures.length > 0 && closures.every(({ type }) => type === 'hidden')
+    endX = barX
+    if (!zeroWidthHiddenBar) measureStart = barX + BARLINE_GAP
   }
 
   analyzed.forEach((analysis, lineIndex) => {
-    const output = lineLayouts[lineIndex];
-    if (output === undefined) return;
+    const output = lineLayouts[lineIndex]
+    if (output === undefined) return
     analysis.inlineLayers.forEach(({ element, elementIndex }) => {
       const next = output.elements
         .filter((positioned) => positioned.elementIndex > elementIndex)
-        .sort((left, right) => left.elementIndex - right.elementIndex)[0];
+        .sort((left, right) => left.elementIndex - right.elementIndex)[0]
       output.inlineLayers.push({
         element,
         elementIndex,
         x: next?.x ?? output.barlines[output.barlines.length - 1]?.x ?? startX,
-      });
-    });
-    output.elements.sort((left, right) => left.elementIndex - right.elementIndex);
-  });
+      })
+    })
+    output.elements.sort((left, right) => left.elementIndex - right.elementIndex)
+  })
 
-  const availableWidth = maximumX - startX;
-  const naturalWidth = endX - startX;
-  const fillRatio = naturalWidth / availableWidth;
-  const shouldFitLine = endX > maximumX || naturalWidth >= 700 ||
-    (measureCount > 1 && fillRatio >= 0.7);
+  const availableWidth = maximumX - startX
+  const naturalWidth = endX - startX
+  const fillRatio = naturalWidth / availableWidth
+  const shouldFitLine =
+    endX > maximumX || naturalWidth >= 700 || (measureCount > 1 && fillRatio >= 0.7)
   if (shouldFitLine && Number.isFinite(maximumX) && endX !== maximumX && endX > startX) {
     // The legacy renderer reserves one reduced-note unit plus the 14 px width
     // of the closing symbol, then pins that final barline to the right edge.
-    const scale = (maximumX - startX + FINAL_SYMBOL_WIDTH) /
-      (endX - startX + UNDERLINED_NOTE_STEP);
-    const compress = (x: number): number => startX + (x - startX) * scale;
+    const scale = (maximumX - startX + FINAL_SYMBOL_WIDTH) / (endX - startX + UNDERLINED_NOTE_STEP)
+    const compress = (x: number): number => startX + (x - startX) * scale
     lineLayouts.forEach((layout) => {
       layout.elements.forEach((positioned) => {
-        positioned.x = compress(positioned.x);
-      });
+        positioned.x = compress(positioned.x)
+      })
       layout.barlines.forEach((barline) => {
-        barline.x = compress(barline.x);
-      });
+        barline.x = compress(barline.x)
+      })
       layout.inlineLayers.forEach((layer) => {
-        layer.x = compress(layer.x);
-      });
+        layer.x = compress(layer.x)
+      })
       layout.xByElement.forEach((x, index) => {
-        layout.xByElement.set(index, compress(x));
-      });
-      layout.barlines.filter(({ measure }) => measure === measureCount - 1).forEach((barline) => {
-        barline.x = maximumX;
-        if (barline.elementIndex !== undefined) layout.xByElement.set(barline.elementIndex, maximumX);
-      });
-      layout.elements.filter((positioned) =>
-        positioned.measure === measureCount - 1 && positioned.element.kind === "barline"
-      ).forEach((positioned) => {
-        positioned.x = maximumX;
-      });
-    });
-    endX = maximumX;
+        layout.xByElement.set(index, compress(x))
+      })
+      layout.barlines
+        .filter(({ measure }) => measure === measureCount - 1)
+        .forEach((barline) => {
+          barline.x = maximumX
+          if (barline.elementIndex !== undefined)
+            layout.xByElement.set(barline.elementIndex, maximumX)
+        })
+      layout.elements
+        .filter(
+          (positioned) =>
+            positioned.measure === measureCount - 1 && positioned.element.kind === 'barline',
+        )
+        .forEach((positioned) => {
+          positioned.x = maximumX
+        })
+    })
+    endX = maximumX
   }
 
-  return { lines: lineLayouts, endX };
+  return { lines: lineLayouts, endX }
 }

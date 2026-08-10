@@ -5,102 +5,102 @@ import type {
   NumberStyle,
   PagePreset,
   SourceLocation,
-} from "./types";
+} from './types'
 
 export const DEFAULT_PAGE_CONFIG: Readonly<LegacyPageConfig> = {
-  page: "A4",
-  margin_top: "80",
-  margin_bottom: "80",
-  margin_left: "80",
-  margin_right: "80",
-  biaoti_font: "Microsoft YaHei",
-  shuzi_font: "b",
-  geci_font: "Microsoft YaHei",
-  height_quci: "13",
-  height_cici: "10",
-  height_ciqu: "40",
-  height_shengbu: "0",
-  biaoti_size: "36",
-  fubiaoti_size: "20",
-  geci_size: "18",
-  body_margin_top: "40",
-  lianyinxian_type: "0",
-};
+  page: 'A4',
+  margin_top: '80',
+  margin_bottom: '80',
+  margin_left: '80',
+  margin_right: '80',
+  biaoti_font: 'Microsoft YaHei',
+  shuzi_font: 'b',
+  geci_font: 'Microsoft YaHei',
+  height_quci: '13',
+  height_cici: '10',
+  height_ciqu: '40',
+  height_shengbu: '0',
+  biaoti_size: '36',
+  fubiaoti_size: '20',
+  geci_size: '18',
+  body_margin_top: '40',
+  lianyinxian_type: '0',
+}
 
 const PAGE_SIZES: Record<PagePreset, { width: number; height: number }> = {
   A4: { width: 1000, height: 1415 },
   A5: { width: 840, height: 1193 },
   A4_horizontal: { width: 1415, height: 1000 },
   A5_horizontal: { width: 1193, height: 840 },
-};
-
-export interface ResolvedPageConfig {
-  page: PagePreset;
-  width: number;
-  height: number;
-  marginTop: number;
-  marginBottom: number;
-  marginLeft: number;
-  marginRight: number;
-  titleFont: FontFamily;
-  lyricFont: FontFamily;
-  numberStyle: NumberStyle;
-  titleSize: number;
-  subtitleSize: number;
-  lyricSize: number;
-  bodyMarginTop: number;
-  musicToLyric: number;
-  lyricToLyric: number;
-  lineGap: number;
-  voiceGap: number;
-  slurStyle: "auto" | "arc" | "flat";
-  heights?: LegacyPageConfig["heights"];
 }
 
-const CONFIG_LOCATION: SourceLocation = { line: 1, column: 1, offset: 0, length: 0 };
+export interface ResolvedPageConfig {
+  page: PagePreset
+  width: number
+  height: number
+  marginTop: number
+  marginBottom: number
+  marginLeft: number
+  marginRight: number
+  titleFont: FontFamily
+  lyricFont: FontFamily
+  numberStyle: NumberStyle
+  titleSize: number
+  subtitleSize: number
+  lyricSize: number
+  bodyMarginTop: number
+  musicToLyric: number
+  lyricToLyric: number
+  lineGap: number
+  voiceGap: number
+  slurStyle: 'auto' | 'arc' | 'flat'
+  heights?: LegacyPageConfig['heights']
+}
+
+const CONFIG_LOCATION: SourceLocation = { line: 1, column: 1, offset: 0, length: 0 }
 
 function diagnostic(message: string): Diagnostic {
   return {
-    severity: "warning",
-    code: "invalid-page-config",
+    severity: 'warning',
+    code: 'invalid-page-config',
     message,
     source: CONFIG_LOCATION,
-  };
+  }
 }
 
 function finiteNumber(value: unknown, fallback: string | number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : Number(fallback);
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : Number(fallback)
 }
 
 function parseInput(
   input: string | Partial<LegacyPageConfig> | null | undefined,
   diagnostics: Diagnostic[],
 ): Partial<LegacyPageConfig> {
-  if (input === undefined || input === null || input === "") return {};
-  if (typeof input !== "string") return input;
+  if (input === undefined || input === null || input === '') return {}
+  if (typeof input !== 'string') return input
   try {
-    const parsed: unknown = JSON.parse(input);
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-      return parsed as Partial<LegacyPageConfig>;
+    const parsed: unknown = JSON.parse(input)
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Partial<LegacyPageConfig>
     }
-    diagnostics.push(diagnostic("pageConfig JSON must contain an object."));
+    diagnostics.push(diagnostic('pageConfig JSON must contain an object.'))
   } catch {
-    diagnostics.push(diagnostic("pageConfig is not valid JSON."));
+    diagnostics.push(diagnostic('pageConfig is not valid JSON.'))
   }
-  return {};
+  return {}
 }
 
 export function resolvePageConfig(
   input: string | Partial<LegacyPageConfig> | null | undefined,
   diagnostics: Diagnostic[],
 ): ResolvedPageConfig {
-  const parsed = parseInput(input, diagnostics);
-  const raw = { ...DEFAULT_PAGE_CONFIG, ...parsed };
-  const page = raw.page in PAGE_SIZES ? raw.page : DEFAULT_PAGE_CONFIG.page;
-  if (page !== raw.page) diagnostics.push(diagnostic(`Unknown page preset '${String(raw.page)}'.`));
-  const size = PAGE_SIZES[page];
-  const slurIndex = Number(raw.lianyinxian_type);
+  const parsed = parseInput(input, diagnostics)
+  const raw = { ...DEFAULT_PAGE_CONFIG, ...parsed }
+  const page = raw.page in PAGE_SIZES ? raw.page : DEFAULT_PAGE_CONFIG.page
+  if (page !== raw.page) diagnostics.push(diagnostic(`Unknown page preset '${String(raw.page)}'.`))
+  const size = PAGE_SIZES[page]
+  const slurIndex = Number(raw.lianyinxian_type)
   const resolved: ResolvedPageConfig = {
     page,
     width: size.width,
@@ -120,24 +120,24 @@ export function resolvePageConfig(
     lyricToLyric: finiteNumber(raw.height_cici, DEFAULT_PAGE_CONFIG.height_cici),
     lineGap: finiteNumber(raw.height_ciqu, DEFAULT_PAGE_CONFIG.height_ciqu),
     voiceGap: finiteNumber(raw.height_shengbu, DEFAULT_PAGE_CONFIG.height_shengbu),
-    slurStyle: (["auto", "arc", "flat"] as const)[slurIndex] ?? "auto",
-  };
-  if (raw.heights !== undefined) resolved.heights = raw.heights;
-  return resolved;
+    slurStyle: (['auto', 'arc', 'flat'] as const)[slurIndex] ?? 'auto',
+  }
+  if (raw.heights !== undefined) resolved.heights = raw.heights
+  return resolved
 }
 
 export function pageSpacing(
   config: ResolvedPageConfig,
   pageNumber: number,
-): Pick<ResolvedPageConfig, "musicToLyric" | "lyricToLyric" | "lineGap" | "voiceGap"> {
-  const values = config.heights?.[`a${pageNumber}`];
+): Pick<ResolvedPageConfig, 'musicToLyric' | 'lyricToLyric' | 'lineGap' | 'voiceGap'> {
+  const values = config.heights?.[`a${pageNumber}`]
   if (values === undefined) {
     return {
       musicToLyric: config.musicToLyric,
       lyricToLyric: config.lyricToLyric,
       lineGap: config.lineGap,
       voiceGap: config.voiceGap,
-    };
+    }
   }
   return {
     musicToLyric: finiteNumber(values[1], config.musicToLyric),
@@ -146,5 +146,5 @@ export function pageSpacing(
     // The legacy backend stores a fifth per-page value but only applies the
     // global voice-group gap.
     voiceGap: config.voiceGap,
-  };
+  }
 }

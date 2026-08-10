@@ -1,9 +1,9 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdir, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const ENDPOINT = "http://zhipu.lezhi99.com/Zhipu-draw";
-const OUTPUT = resolve(dirname(fileURLToPath(import.meta.url)), "../src/assets/glyphs.json");
+const ENDPOINT = 'http://zhipu.lezhi99.com/Zhipu-draw'
+const OUTPUT = resolve(dirname(fileURLToPath(import.meta.url)), '../src/assets/glyphs.json')
 
 const coreProbe = `V: 1.0
 B: glyph probe
@@ -24,50 +24,52 @@ Q: (y1/ 2/ 3/ 4/ 5/ 6/) | (y1/ 2/ 3/ 4/ 5/ 6/ 7/) |
 Q: (y1/ 2/ 3/ 4/ 5/ 6/ 7/ 1/) | (y1/ 2/ 3/ 4/ 5/ 6/ 7/ 1/ 2/) |
 Q: (1 2 |
 Q: 3 4) |
-`;
+`
 
 const probes = [
-  ...["a", "b", "c"].map((numberStyle) => ({
+  ...['a', 'b', 'c'].map((numberStyle) => ({
     code: coreProbe,
     pageConfig: JSON.stringify({ shuzi_font: numberStyle }),
   })),
-  ...["B", "C", "D", "E", "F", "G"].map((mode) => ({
+  ...['B', 'C', 'D', 'E', 'F', 'G'].map((mode) => ({
     code: `V: 1.0\nB: glyph probe\nD: ${mode}\nP: 4/4\nQ: 1 |`,
-    pageConfig: "{}",
+    pageConfig: '{}',
   })),
-];
+]
 
 async function draw({ code, pageConfig }) {
-  const body = new URLSearchParams({ code, customCode: "", pageConfig, pageNum: "0" });
+  const body = new URLSearchParams({ code, customCode: '', pageConfig, pageNum: '0' })
   const response = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded;charset=UTF-8' },
     body,
-  });
-  if (!response.ok) throw new Error(`Fanqie renderer returned HTTP ${response.status}`);
-  return response.text();
+  })
+  if (!response.ok) throw new Error(`Fanqie renderer returned HTTP ${response.status}`)
+  return response.text()
 }
 
 function staticGroups(svg) {
-  const defs = svg.match(/<defs>([\s\S]*?)<\/defs>/)?.[1] ?? "";
+  const defs = svg.match(/<defs>([\s\S]*?)<\/defs>/)?.[1] ?? ''
   return [...defs.matchAll(/<g id="([^"]+)"[\s\S]*?<\/g>/g)]
-    .filter(([, id]) => id !== "custom" && !/^(?:hy|qy)\d+_/.test(id))
-    .map((match) => [match[1], match[0]]);
+    .filter(([, id]) => id !== 'custom' && !/^(?:hy|qy)\d+_/.test(id))
+    .map((match) => [match[1], match[0]])
 }
 
-const glyphs = new Map();
+const glyphs = new Map()
 for (const probe of probes) {
-  for (const [id, markup] of staticGroups(await draw(probe))) glyphs.set(id, markup);
+  for (const [id, markup] of staticGroups(await draw(probe))) glyphs.set(id, markup)
 }
 
-const output = Object.fromEntries([...glyphs].sort(([left], [right]) => left.localeCompare(right)));
+const output = Object.fromEntries([...glyphs].sort(([left], [right]) => left.localeCompare(right)))
 if (Object.keys(output).length < 100) {
-  throw new Error(`Only extracted ${Object.keys(output).length} glyphs; refusing to overwrite ${OUTPUT}`);
+  throw new Error(
+    `Only extracted ${Object.keys(output).length} glyphs; refusing to overwrite ${OUTPUT}`,
+  )
 }
-if (Object.values(output).some((markup) => markup.includes("<text"))) {
-  throw new Error("The API response unexpectedly contained text-based score glyphs");
+if (Object.values(output).some((markup) => markup.includes('<text'))) {
+  throw new Error('The API response unexpectedly contained text-based score glyphs')
 }
 
-await mkdir(dirname(OUTPUT), { recursive: true });
-await writeFile(OUTPUT, `${JSON.stringify(output, null, 2)}\n`, "utf8");
-console.log(`Extracted ${Object.keys(output).length} glyphs to ${OUTPUT}`);
+await mkdir(dirname(OUTPUT), { recursive: true })
+await writeFile(OUTPUT, `${JSON.stringify(output, null, 2)}\n`, 'utf8')
+console.log(`Extracted ${Object.keys(output).length} glyphs to ${OUTPUT}`)

@@ -41,35 +41,27 @@
         </li>
       </ul>
     </div>
-    <div
-      class="fileInfo"
-      style="float: left; width: 585px; margin: 10px 5px 0 5px"
-    >
+    <div class="fileInfo" style="float: left; width: 585px; margin: 10px 5px 0 5px">
       当前选中：<span class="filename"></span>
       <input
         style="float: right; margin-left: 5px"
         type="button"
-        onclick="winClose();"
+        onclick="winClose()"
         value="取消"
       />
-      <input
-        style="float: right"
-        type="button"
-        onclick="openExampleFile();"
-        value="打开"
-      />
+      <input style="float: right" type="button" onclick="openExampleFile()" value="打开" />
     </div>
   </div>
 </div>
 
 <script>
-  $(".fileList .list ul li .select")
-    .bind("mousedown", function (event) {
-      exampleFileId = $(this).parent().attr("data-id");
-      selectFile(exampleFileId);
+  $('.fileList .list ul li .select')
+    .bind('mousedown', function (event) {
+      exampleFileId = $(this).parent().attr('data-id')
+      selectFile(exampleFileId)
     })
     .dblclick(function () {
       //双击事件
-      openExampleFile();
-    });
+      openExampleFile()
+    })
 </script>
