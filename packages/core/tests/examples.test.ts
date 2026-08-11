@@ -92,8 +92,12 @@ describe('bundled legacy examples', () => {
     const svg = renderExample(example)
     const pages = svg.split('[fenye]').filter(Boolean)
     const defs = pages.map((page) => page.match(/<defs>([\s\S]*?)<\/defs>/)?.[1] ?? '').join('')
+    const lyricLine = linesOf(example).find((line) => line.raw.includes(`1/ 2/ 3/ (2/ | 2/) 1/`))
 
     expect(document.diagnostics).toEqual([])
+    expect(lyricLine?.lyrics[0]?.syllables.map(({ text }) => text)).toContain('洋(')
+    expect(svg).toContain('>洋(</text>')
+    expect(svg).not.toContain('>洋欧</text>')
     expect(pages).toHaveLength(4)
     expect(defs).toContain('<g id="lidu_f"')
     expect(defs).toContain('<path')

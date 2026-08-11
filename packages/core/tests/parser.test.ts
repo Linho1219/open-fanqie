@@ -155,6 +155,15 @@ Q: 1 - ||
     expect(document.diagnostics).toEqual([])
   })
 
+  it('joins punctuation to the previous lyric syllable after a tilde', () => {
+    const document = parse(`Q: 1 2 3 4 5 6 7 |\nC: 喜洋洋~(欧@郎啰`)
+    const syllables = document.pages[0]?.groups[0]?.voices[0]?.lyrics[0]?.syllables
+
+    expect(syllables?.map(({ text }) => text)).toEqual(['喜', '洋', '洋(', '欧', '', '郎', '啰'])
+    expect(syllables?.[2]?.trailingPunctuation).toBeUndefined()
+    expect(document.diagnostics).toEqual([])
+  })
+
   it('binds lyrics to the most recent music line regardless of the C suffix', () => {
     const document = parse(`Q1: 1\nC2: 甲\nQ2: 2\nC1: 乙`)
     const voices = document.pages[0]?.groups[0]?.voices

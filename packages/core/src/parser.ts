@@ -732,11 +732,11 @@ function parseMusicLine(
 }
 
 function isCjkCharacter(char: string): boolean {
-  return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(char)
+  return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}0-9]/u.test(char)
 }
 
 function isPunctuation(char: string): boolean {
-  return /[\p{Punctuation}\p{Symbol}]/u.test(char)
+  return /[，。！？；：,.!?;:]/.test(char)
 }
 
 function parseLyrics(source: string, context: ParseContext): LyricLine {
@@ -804,6 +804,11 @@ function parseLyrics(source: string, context: ParseContext): LyricLine {
       continue
     }
     if (isPunctuation(char)) {
+      if (joinNext) {
+        push(char, cursor, cursor + 1)
+        cursor += 1
+        continue
+      }
       const previous = syllables[syllables.length - 1]
       if (previous === undefined) push(char, cursor, cursor + 1)
       else {
