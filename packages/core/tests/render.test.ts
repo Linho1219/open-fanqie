@@ -225,6 +225,17 @@ Q: |/[+"1." 1 2 |]
     )
   })
 
+  it('pushes later notes apart for overlong full-width and ASCII lyrics', () => {
+    const svg = render(`Q1: 1/ 2/ 3/ 4/\nC1: 多~个~字 example 测试`)
+
+    expect(uses(svg, 1).filter(({ code }) => code.endsWith('/'))).toEqual([
+      { x: 83, code: '1/' },
+      { x: 166.33333333333, code: '2/' },
+      { x: 276.05555555556, code: '3/' },
+      { x: 301.05555555556, code: '4/' },
+    ])
+  })
+
   it('aligns and reserves space for temporary accompaniment and voices', () => {
     const svg = render(`
 Q: 1 2 {dsb 3 4} 5 6 |

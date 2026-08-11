@@ -12,6 +12,8 @@ export const PLAIN_NOTE_STEP = 37.5
 export const UNDERLINED_NOTE_STEP = 25
 export const BARLINE_GAP = 35
 const FINAL_SYMBOL_WIDTH = 14
+// The backend uses a fixed lyric collision grid rather than the configured font size.
+const LYRIC_FULL_WIDTH_STEP = 250 / 9
 
 type TimedElement = NoteElement | SustainElement
 
@@ -20,6 +22,7 @@ interface AnalyzedItem {
   elementIndex: number
   beat: number
   compact: boolean
+  lyricOverflow: number
 }
 
 interface AnalyzedBarline {
@@ -128,6 +131,34 @@ function targetSpacing(element: TimedElement, compact = false): number {
     : PLAIN_NOTE_STEP
 }
 
+function lyricOverflow(text: string): number {
+  const cells = [...text].reduce(
+    (total, character) => total + (/^[\x00-\x7f]$/.test(character) ? 0.5 : 1),
+    0,
+  )
+  if (cells <= 1) return 0
+  return Math.max(0, cells * LYRIC_FULL_WIDTH_STEP - UNDERLINED_NOTE_STEP)
+}
+
+function lyricOverflowByElement(line: ScoreLine): Map<number, number> {
+  const noteIndices = line.elements.flatMap((element, elementIndex) =>
+    element.kind === 'note' ? [elementIndex] : [],
+  )
+  const overflowByElement = new Map<number, number>()
+  line.lyrics.forEach(({ syllables }) => {
+    syllables.forEach(({ text }, syllableIndex) => {
+      const elementIndex = noteIndices[syllableIndex]
+      if (elementIndex === undefined) return
+      const overflow = lyricOverflow(text)
+      overflowByElement.set(
+        elementIndex,
+        Math.max(overflowByElement.get(elementIndex) ?? 0, overflow),
+      )
+    })
+  })
+  return overflowByElement
+}
+
 function withinBeatTrailingWidth(element: TimedElement): number {
   if (element.kind !== 'note') return 0
   return (
@@ -153,7 +184,8 @@ function withinBeatSpacing(previous: AnalyzedItem, current: AnalyzedItem): numbe
       targetSpacing(current.element, current.compact),
     ) +
     withinBeatTrailingWidth(previous.element) +
-    leadingWidth(current.element, false, previous.element)
+    leadingWidth(current.element, false, previous.element) +
+    previous.lyricOverflow
   )
 }
 
@@ -180,6 +212,7 @@ function analyzeLine(line: ScoreLine): AnalyzedLine {
   const tupletGroups = new Map<number, Mark>()
   let previousTimedIndex: number | undefined
   let previousTimedElement: TimedElement | undefined
+  const lyricOverflow = lyricOverflowByElement(line)
 
   line.marks
     .filter(({ type }) => type === 'tuplet')
@@ -250,6 +283,7 @@ function analyzeLine(line: ScoreLine): AnalyzedLine {
       elementIndex,
       beat: currentBeat,
       compact: (tupletScales.get(elementIndex) ?? 1) < 1,
+      lyricOverflow: lyricOverflow.get(elementIndex) ?? 0,
     })
     previousTimedIndex = elementIndex
     previousTimedElement = element
@@ -330,7 +364,17 @@ export function layoutVoiceGroup(
 
       const lastColumn = columns[columns.length - 1] ?? 0
       const terminalWidth = Math.max(0, ...voiceItems.map(beatTerminalWidth))
-      nextBeatStart += lastColumn + PLAIN_NOTE_STEP + terminalWidth
+      const nextBeatCandidates = voiceItems.flatMap((items) => {
+        const last = items[items.length - 1]
+        if (last === undefined) return []
+        return [
+          (columns[items.length - 1] ?? 0) +
+            PLAIN_NOTE_STEP +
+            beatTerminalWidth(items) +
+            last.lyricOverflow,
+        ]
+      })
+      nextBeatStart += Math.max(lastColumn + PLAIN_NOTE_STEP + terminalWidth, ...nextBeatCandidates)
     }
 
     const lastBeat = beatCount - 1
