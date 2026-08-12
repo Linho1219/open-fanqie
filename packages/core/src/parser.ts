@@ -1067,7 +1067,6 @@ export function parse(input: string): ScoreDocument {
       return
     }
     if (trimmed === '[fenye]') {
-      reportDanglingContinuations(lineNumber, lineOffset)
       discardContinuations()
       page = { index: pages.length, groups: [] }
       pages.push(page)

@@ -291,7 +291,7 @@ Q: 1 |
 
     expect(document.pages[0]?.groups[0]?.voices[0]?.marks).toEqual([])
     expect(document.pages[1]?.groups[0]?.voices[0]?.marks).toEqual([])
-    expect(document.diagnostics.map(({ code }) => code)).toContain('unclosed-mark')
+    expect(document.diagnostics).toEqual([])
   })
 
   it('does not carry slurs across intervening voices', () => {
