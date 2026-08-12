@@ -129,6 +129,16 @@ Q: 1 |
     expect(svg).not.toContain('>抒情地</text>')
   })
 
+  it('does not render metadata header fields without a B line', () => {
+    const svg = render(`D: C\nP: 4/4\nJ: 80\nZ: 作者\nQ: 1 |`)
+
+    expect(svg).not.toContain('xlink:href="#diaohao_fu"')
+    expect(svg).not.toContain('xlink:href="#paihao_xian"')
+    expect(svg).not.toContain('xlink:href="#jiepaifu"')
+    expect(svg).not.toContain('>作者</text>')
+    expect(svg).toContain('x="83" y="130" xlink:href="#shuzi_b_1"')
+  })
+
   it('keeps barline annotations in code without displaying ordinary text', () => {
     const svg = render(`Q: 1 |"p:2 / 4" 2 |"备注" 3 |`)
 

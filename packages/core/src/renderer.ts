@@ -167,13 +167,7 @@ function renderHeader(
   registry: GlyphRegistry,
 ): { markup: string[]; bodyY: number } {
   const markup: string[] = []
-  if (
-    metadata.titles.length === 0 &&
-    metadata.authors.length === 0 &&
-    metadata.mode === undefined &&
-    metadata.meters.length === 0 &&
-    metadata.tempos.length === 0
-  ) {
+  if (metadata.titles.length === 0) {
     return { markup, bodyY: config.marginTop + config.bodyMarginTop + 10 }
   }
   const titleY = config.marginTop + 30
