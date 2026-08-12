@@ -40,6 +40,41 @@ Q: 1 - ||
     expect(document.diagnostics).toEqual([])
   })
 
+  it('groups auxiliary meters and applies repeated header precedence', () => {
+    const document = parse(`
+B: 标题
+P: 4/4
+P: 3/4 ( 2/4 1/4 )
+J: 80
+J: 120
+J: 欢快地
+J: 抒情地
+Q: 1 |
+`)
+
+    expect(document.metadata.meters).toEqual([
+      { numerator: 3, denominator: 4, parenthesized: false },
+      { numerator: 2, denominator: 4, parenthesized: true },
+      { numerator: 1, denominator: 4, parenthesized: true },
+    ])
+    expect(document.metadata.tempos).toEqual([80, '欢快地'])
+    expect(document.diagnostics).toEqual([])
+  })
+
+  it('preserves normalized barline annotation code', () => {
+    const document = parse(`Q: 1 |"p:2 / 4" 2 |"foo bar" 3 |`)
+    const barlines = document.pages[0]?.groups[0]?.voices[0]?.elements.filter(
+      (element) => element.kind === 'barline',
+    )
+
+    expect(barlines).toMatchObject([
+      { temporaryMeter: { numerator: 2, denominator: 4 }, code: "|'p:2/4'" },
+      { code: "|'foobar'" },
+      { code: '|' },
+    ])
+    expect(document.diagnostics).toEqual([])
+  })
+
   it('parses notes, barlines, commands, and source code', () => {
     const document = parse(`Q: 1'#//..&yc 8 9, 0 2$ 3= - |: :| :|: || ||/ |/ |*`)
     const elements = document.pages[0]?.groups[0]?.voices[0]?.elements ?? []
@@ -116,6 +151,15 @@ Q: 1 - ||
     expect(line?.marks.map(({ start, end }) => [start, end])).toEqual([
       [1, 2],
       [3, 4],
+    ])
+    expect(document.diagnostics).toEqual([])
+  })
+
+  it('counts sustain elements as tuplet members', () => {
+    const document = parse(`Q: (y1 - 2) |`)
+
+    expect(document.pages[0]?.groups[0]?.voices[0]?.marks).toMatchObject([
+      { type: 'tuplet', caption: '3' },
     ])
     expect(document.diagnostics).toEqual([])
   })
@@ -222,16 +266,25 @@ Q: 1 - ||
     expect(document.diagnostics).toEqual([])
   })
 
-  it('carries slurs across page breaks', () => {
-    const document = parse(`Q: 1 (2 |\n[fenye]\nQ: 3) 4 |`)
+  it('carries volta marks across music lines of the same voice', () => {
+    const document = parse(`Q: 1 |["1." 2 3 |\nQ: |/ 4 5 |] 6 |`)
+    const groups = document.pages[0]?.groups ?? []
 
-    expect(document.pages[0]?.groups[0]?.voices[0]?.marks).toMatchObject([
-      { continuationToNext: true },
+    expect(groups[0]?.voices[0]?.marks).toMatchObject([
+      { type: 'volta', continuationToNext: true, caption: '1.' },
     ])
-    expect(document.pages[1]?.groups[0]?.voices[0]?.marks).toMatchObject([
-      { continuationFromPrevious: true },
+    expect(groups[1]?.voices[0]?.marks).toMatchObject([
+      { type: 'volta', continuationFromPrevious: true },
     ])
     expect(document.diagnostics).toEqual([])
+  })
+
+  it('does not carry slurs across page breaks', () => {
+    const document = parse(`Q: 1 (2 |\n[fenye]\nQ: 3) 4 |`)
+
+    expect(document.pages[0]?.groups[0]?.voices[0]?.marks).toEqual([])
+    expect(document.pages[1]?.groups[0]?.voices[0]?.marks).toEqual([])
+    expect(document.diagnostics.map(({ code }) => code)).toContain('unclosed-mark')
   })
 
   it('does not carry slurs across intervening voices', () => {

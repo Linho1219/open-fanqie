@@ -10,6 +10,7 @@ import {
 } from './glyphs'
 import { layoutVoiceGroup, type LineLayout, type PositionedElement } from './layout'
 import { parse } from './parser'
+import { legacyPlaybackTime } from './timing'
 import type {
   BarlineElement,
   Diagnostic,
@@ -74,16 +75,6 @@ function text(
   return `<text x="${formatNumber(x)}" y="${formatNumber(y)}" dy="${formatNumber(options.dy ?? FONT_SIZE_FIX * options.size)}"${options.anchor === undefined || options.anchor === 'start' ? '' : ` text-anchor="${options.anchor}"`} fill="${options.fill ?? INK}"${style === '' ? '' : ` style="${style};"`} font-size="${formatNumber(options.size)}" font-family="${escapeXml(options.font)}"${extra}>${escapeXml(value)}</text>`
 }
 
-function durationTime(note: NoteElement): number {
-  let multiplier = 1
-  let fraction = 0.5
-  for (let dot = 0; dot < note.dots; dot += 1) {
-    multiplier += fraction
-    fraction /= 2
-  }
-  return (4 / note.duration) * multiplier
-}
-
 function audioCode(note: NoteElement): string {
   const octave = note.octave > 0 ? "'".repeat(note.octave) : ','.repeat(Math.abs(note.octave))
   return `${note.pitch}${octave}`
@@ -114,17 +105,36 @@ function modeHeader(
     x += 50
   }
 
-  const meter = metadata.meters[0]
-  if (meter !== undefined) {
+  metadata.meters.forEach((meter, index) => {
+    const previousParenthesized = metadata.meters[index - 1]?.parenthesized === true
+    const nextParenthesized = metadata.meters[index + 1]?.parenthesized === true
+    if (meter.parenthesized && !previousParenthesized) {
+      output.push(registry.use('paihao_kuohu_zuo', x, y))
+      x += 15
+    }
     output.push(registry.use('paihao_xian', x, y))
     const digitX = x + 10
-    output.push(registry.use(`shuzi_${config.numberStyle}_bian_${meter.numerator}`, digitX, y - 12))
     output.push(
-      registry.use(`shuzi_${config.numberStyle}_bian_${meter.denominator}`, digitX, y + 12, {
-        fill: '#414141',
-      }),
+      registry.use(
+        `shuzi_${config.numberStyle}_bian_${String(meter.numerator).slice(-1)}`,
+        digitX,
+        y - 12,
+      ),
     )
-  }
+    output.push(
+      registry.use(
+        `shuzi_${config.numberStyle}_bian_${String(meter.denominator).slice(-1)}`,
+        digitX,
+        y + 12,
+        { fill: '#414141' },
+      ),
+    )
+    x += 27
+    if (meter.parenthesized && !nextParenthesized) {
+      output.push(registry.use('paihao_kuohu_you', x, y))
+      x += 15
+    }
+  })
 
   metadata.tempos.forEach((tempo, index) => {
     const tempoY = y + 40 + index * 22
@@ -373,7 +383,7 @@ function renderNote(
     const id = note.pitch === 9 ? 'shuzi_x' : `shuzi_${config.numberStyle}_${note.pitch}`
     output.push(
       registry.use(id, x, y, {
-        time: formatNumber(timeOverride ?? durationTime(note)),
+        time: formatNumber(timeOverride ?? legacyPlaybackTime(note)),
         audio: audioOverride ?? audioCode(note),
         notepos,
         code: note.code,
@@ -420,10 +430,11 @@ function renderSustain(
   y: number,
   notepos: string,
   registry: GlyphRegistry,
+  timeOverride?: number,
 ): string[] {
   return [
     registry.use('yanyinfu', x, y, {
-      time: 1,
+      time: formatNumber(timeOverride ?? 1),
       audio: '',
       notepos,
       code: sustain.code,
@@ -499,15 +510,6 @@ function renderBarline(
     )
     output.push(
       registry.use(`linshi_paihao_shuzi_${barline.temporaryMeter.denominator}`, x + 28, y + 12),
-    )
-  }
-  if (barline?.annotation !== undefined) {
-    output.push(
-      text(barline.annotation, x, y + 20, {
-        font: 'Microsoft YaHei',
-        size: 12,
-        anchor: 'middle',
-      }),
     )
   }
   return output
@@ -685,19 +687,26 @@ function renderMark(
     ]
   }
   const startElement = layout.line.elements[mark.start]
-  const left = start + (startElement?.kind === 'barline' && startElement.type === 'hidden' ? -6 : 2)
-  const right = end - 2
+  const left =
+    mark.continuationFromPrevious === true
+      ? config.marginLeft - 4
+      : start + (startElement?.kind === 'barline' && startElement.type === 'hidden' ? -6 : 2)
+  const right = mark.continuationToNext === true ? config.width - config.marginRight + 4 : end - 2
   const voltaTop = y - 30 - mark.level * 10
   const output = [
-    `<line x1="${formatNumber(left)}" y1="${formatNumber(voltaTop + 10)}" x2="${formatNumber(left)}" y2="${formatNumber(voltaTop)}" stroke-width="1" stroke="${INK}" fill="none"></line>`,
+    ...(mark.continuationFromPrevious === true
+      ? []
+      : [
+          `<line x1="${formatNumber(left)}" y1="${formatNumber(voltaTop + 10)}" x2="${formatNumber(left)}" y2="${formatNumber(voltaTop)}" stroke-width="1" stroke="${INK}" fill="none"></line>`,
+        ]),
     `<line x1="${formatNumber(left)}" y1="${formatNumber(voltaTop)}" x2="${formatNumber(right)}" y2="${formatNumber(voltaTop)}" stroke-width="1" stroke="${INK}" fill="none"></line>`,
   ]
-  if (mark.openEnd !== true) {
+  if (mark.openEnd !== true && mark.continuationToNext !== true) {
     output.push(
       `<line x1="${formatNumber(right)}" y1="${formatNumber(voltaTop + 10)}" x2="${formatNumber(right)}" y2="${formatNumber(voltaTop)}" stroke-width="1" stroke="${INK}" fill="none"></line>`,
     )
   }
-  if (mark.caption !== undefined) {
+  if (mark.caption !== undefined && mark.continuationFromPrevious !== true) {
     output.push(
       text(mark.caption, left + 3, voltaTop + 10, {
         font: 'Microsoft YaHei',
@@ -902,13 +911,8 @@ function renderLine(
           positioned.elementIndex >= mark.start &&
           positioned.elementIndex <= mark.end,
       )
-      const count = Number(tuplet?.caption)
-      const normalCount =
-        Number.isFinite(count) && count >= 3 ? 2 ** Math.floor(Math.log2(count - 1)) : count
       const timeOverride =
-        tuplet === undefined || !Number.isFinite(normalCount)
-          ? undefined
-          : Number(((durationTime(positioned.element) * normalCount) / count).toFixed(2))
+        tuplet === undefined ? undefined : legacyPlaybackTime(positioned.element, tuplet)
       const tie = layout.line.marks.find(
         (mark) => mark.type === 'slur' && mark.end === positioned.elementIndex,
       )
@@ -948,7 +952,24 @@ function renderLine(
         ),
       )
     } else {
-      output.push(...renderSustain(positioned.element, positioned.x, elementY, notepos, registry))
+      const tuplet = layout.line.marks.find(
+        (mark) =>
+          mark.type === 'tuplet' &&
+          positioned.elementIndex >= mark.start &&
+          positioned.elementIndex <= mark.end,
+      )
+      const timeOverride =
+        tuplet === undefined ? undefined : legacyPlaybackTime(positioned.element, tuplet)
+      output.push(
+        ...renderSustain(
+          positioned.element,
+          positioned.x,
+          elementY,
+          notepos,
+          registry,
+          timeOverride,
+        ),
+      )
     }
   })
 

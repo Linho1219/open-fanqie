@@ -8,7 +8,7 @@ const OUTPUT = resolve(dirname(fileURLToPath(import.meta.url)), '../src/assets/g
 const coreProbe = `V: 1.0
 B: glyph probe
 D: A
-P: 0/1 2/3 4/5 6/7 8/9
+P: 0/1 (2/3 4/5) 6/7 8/9
 J: 80
 Q: 0 1 2 3 4 5 6 7 8 9 - |
 Q: 1# 2$ 3= 4' 5'' 6, 7,, 1. 2.. |

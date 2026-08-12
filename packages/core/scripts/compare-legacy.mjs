@@ -245,10 +245,6 @@ function firstPositionedCoordinateDifference(left, right) {
   return undefined
 }
 
-function unique(items) {
-  return [...new Map(items.map((item) => [stable(item), item])).values()]
-}
-
 function missingSignatures(expected, actual, signature) {
   const available = new Map()
   actual.forEach((item) => {
@@ -323,12 +319,12 @@ function curveUses(uses) {
 function comparePage(apiSvg, localSvg) {
   const api = inspectPage(apiSvg)
   const local = inspectPage(localSvg)
-  const apiUses = unique(api.uses)
-  const localUses = unique(local.uses)
-  const apiLines = unique(api.lines)
-  const localLines = unique(local.lines)
-  const apiPaths = unique(api.paths)
-  const localPaths = unique(local.paths)
+  const apiUses = api.uses
+  const localUses = local.uses
+  const apiLines = api.lines
+  const localLines = local.lines
+  const apiPaths = api.paths
+  const localPaths = local.paths
   const useAttributeMismatches = unorderedAttributeMismatches(apiUses, localUses)
   const hrefs = [...new Set([...apiUses, ...localUses].map((item) => item['xlink:href'] ?? ''))]
     .map((href) => ({
@@ -444,7 +440,9 @@ async function compareCase(name, overrides) {
   return {
     case: name,
     pageCount: { api: apiPages.length, local: localPages.length },
-    pages: apiPages.map((page, index) => comparePage(page, localPages[index] ?? '')),
+    pages: Array.from({ length: Math.max(apiPages.length, localPages.length) }, (_, index) =>
+      comparePage(apiPages[index] ?? '', localPages[index] ?? ''),
+    ),
   }
 }
 
@@ -460,30 +458,35 @@ async function worker() {
 }
 await Promise.all(Array.from({ length: Math.min(4, selected.length) }, () => worker()))
 
+function failedPages(report) {
+  const pageCountMatches = report.pageCount.api === report.pageCount.local
+  return report.pages.flatMap((page, index) => {
+    const countsMatch =
+      page.uses.api === page.uses.local &&
+      page.texts.api === page.texts.local &&
+      page.lines.api === page.lines.local &&
+      page.paths.api === page.paths.local
+    const matches =
+      page.root &&
+      page.defs.missing.length === 0 &&
+      page.defs.extra.length === 0 &&
+      countsMatch &&
+      page.uses.first === undefined &&
+      page.uses.firstCoordinate === undefined &&
+      page.uses.firstUnordered === undefined &&
+      page.texts.first === undefined &&
+      page.lines.first === undefined &&
+      page.paths.first === undefined
+    return matches && pageCountMatches ? [] : [index]
+  })
+}
+
 if (process.argv.includes('--summary')) {
   console.log(
     JSON.stringify(
       reports.map((report) => ({
         case: report.case,
-        failedPages: report.pages.flatMap((page, index) => {
-          const countsMatch =
-            page.uses.api === page.uses.local &&
-            page.texts.api === page.texts.local &&
-            page.lines.api === page.lines.local &&
-            page.paths.api === page.paths.local
-          const matches =
-            page.root &&
-            page.defs.missing.length === 0 &&
-            page.defs.extra.length === 0 &&
-            countsMatch &&
-            page.uses.first === undefined &&
-            page.uses.firstCoordinate === undefined &&
-            page.uses.firstUnordered === undefined &&
-            page.texts.first === undefined &&
-            page.lines.first === undefined &&
-            page.paths.first === undefined
-          return matches ? [] : [index]
-        }),
+        failedPages: failedPages(report),
       })),
     ),
   )
@@ -542,3 +545,7 @@ if (process.argv.includes('--summary')) {
       console.log(JSON.stringify(report, null, 2))
     }
   }
+
+if (process.argv.includes('--strict') && reports.some((report) => failedPages(report).length > 0)) {
+  process.exitCode = 1
+}

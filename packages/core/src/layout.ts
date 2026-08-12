@@ -1,12 +1,5 @@
-import type {
-  BarlineElement,
-  InlineLayerElement,
-  Mark,
-  NoteElement,
-  ScoreLine,
-  SustainElement,
-  VoiceGroup,
-} from './types'
+import type { BarlineElement, InlineLayerElement, Mark, ScoreLine, VoiceGroup } from './types'
+import { durationInQuarterNotes, type TimedElement, tupletScale } from './timing'
 
 export const PLAIN_NOTE_STEP = 37.5
 export const UNDERLINED_NOTE_STEP = 25
@@ -14,8 +7,6 @@ export const BARLINE_GAP = 35
 const FINAL_SYMBOL_WIDTH = 14
 // The backend uses a fixed lyric collision grid rather than the configured font size.
 const LYRIC_FULL_WIDTH_STEP = 250 / 9
-
-type TimedElement = NoteElement | SustainElement
 
 interface AnalyzedItem {
   element: TimedElement
@@ -84,18 +75,6 @@ export interface VoiceGroupLayout {
   voiceBraceX?: number
 }
 
-function durationInQuarterNotes(element: TimedElement): number {
-  if (element.kind === 'sustain') return 1
-  const base = 4 / element.duration
-  let multiplier = 1
-  let fraction = 0.5
-  for (let dot = 0; dot < element.dots; dot += 1) {
-    multiplier += fraction
-    fraction /= 2
-  }
-  return base * multiplier
-}
-
 function timedDuration(
   elements: readonly (TimedElement | BarlineElement)[],
   marks: Mark[],
@@ -111,11 +90,9 @@ function timedDuration(
           ? [index]
           : [],
       )
-      if (timedIndices.length < 3) return
-      const normalCount = 2 ** Math.floor(Math.log2(timedIndices.length - 1))
-      timedIndices.forEach((index) =>
-        tupletScaleByIndex.set(index, normalCount / timedIndices.length),
-      )
+      const scale = tupletScale(mark)
+      if (scale === undefined) return
+      timedIndices.forEach((index) => tupletScaleByIndex.set(index, scale))
     })
   return elements.reduce(
     (total, element, index) =>
@@ -225,11 +202,10 @@ function analyzeLine(line: ScoreLine): AnalyzedLine {
           ? [elementIndex]
           : [],
       )
-      const count = timedIndices.length
-      if (count < 3) return
-      const normalCount = 2 ** Math.floor(Math.log2(count - 1))
+      const scale = tupletScale(mark)
+      if (scale === undefined) return
       timedIndices.forEach((elementIndex) => {
-        tupletScales.set(elementIndex, normalCount / count)
+        tupletScales.set(elementIndex, scale)
         tupletGroups.set(elementIndex, mark)
       })
     })

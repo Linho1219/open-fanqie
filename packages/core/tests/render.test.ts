@@ -106,6 +106,37 @@ C2: 一
     expect(svg).not.toContain('<path d="M ')
   })
 
+  it('renders all meters from the final P header and one tempo of each kind', () => {
+    const svg = render(`
+B: 标题
+P: 4/4
+P: 3/4 (2/4 1/4)
+J: 80
+J: 120
+J: 欢快地
+J: 抒情地
+Q: 1 |
+`)
+
+    expect(svg.match(/xlink:href="#paihao_xian"/g)).toHaveLength(3)
+    expect(svg).toContain('<g id="paihao_kuohu_zuo"')
+    expect(svg).toContain('<g id="paihao_kuohu_you"')
+    expect(svg).toContain('xlink:href="#paihao_kuohu_zuo"')
+    expect(svg).toContain('xlink:href="#paihao_kuohu_you"')
+    expect(svg).toContain('data-jiepai="80"')
+    expect(svg).not.toContain('data-jiepai="120"')
+    expect(svg).toContain('>欢快地</text>')
+    expect(svg).not.toContain('>抒情地</text>')
+  })
+
+  it('keeps barline annotations in code without displaying ordinary text', () => {
+    const svg = render(`Q: 1 |"p:2 / 4" 2 |"备注" 3 |`)
+
+    expect(svg).toContain('code="|\'p:2/4\'"')
+    expect(svg).toContain('code="|\'备注\'"')
+    expect(svg).not.toContain('>备注</text>')
+  })
+
   it('matches the observed legacy spacing constants', () => {
     const svg = render(`
 Q: 1 2 3 4 |
@@ -243,6 +274,13 @@ Q2: 6 - - - | 7 - - - :|| 1' - - - | 2 - - - |
       { x: 170.5, code: '4' },
       { x: 205.5, code: '|' },
     ])
+  })
+
+  it('scales notes and sustains consistently inside tuplets', () => {
+    const svg = render(`Q: (y1 - 2) |`)
+
+    expect(svg.match(/time="0\.67"/g)).toHaveLength(3)
+    expect(svg).toContain('xlink:href="#lianyin_shuzi_3"')
   })
 
   it('stacks genuinely overlapping slurs while sharing touching endpoints', () => {
@@ -395,6 +433,21 @@ Q: 1 2 {bz 3/ 4/} 5 6 |
     expect(svg).toContain('xlink:href="#lianyinxian_you"')
     expect(svg).toContain('x2="924" y2="104.8"')
     expect(svg).toContain('x1="77" y1="182.8"')
+  })
+
+  it('splits same-page cross-line volta marks at the page margins', () => {
+    const svg = render(`Q: 1 |["1." 2 3 |\nQ: |/ 4 5 |] 6 |`)
+
+    expect(svg).toContain('x2="924"')
+    expect(svg).toContain('x1="76"')
+    expect(svg.match(/>1\.<\/text>/g)).toHaveLength(1)
+  })
+
+  it('does not render automatic slur continuations across pages', () => {
+    const svg = render(`Q: 1 (2 |\n[fenye]\nQ: 3) 4 |`)
+
+    expect(svg).not.toContain('xlink:href="#lianyinxian_zuo"')
+    expect(svg).not.toContain('xlink:href="#lianyinxian_you"')
   })
 
   it('keeps short multi-measure phrases at their natural width', () => {

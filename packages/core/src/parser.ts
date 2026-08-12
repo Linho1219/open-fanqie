@@ -75,6 +75,7 @@ interface ParsedMusicLine {
   elements: MusicElement[]
   marks: Mark[]
   carriedCurvedMarks: OpenMark[]
+  carriedVoltaMarks: OpenMark[]
 }
 
 function location(context: ParseContext, index: number, length = 1): SourceLocation {
@@ -287,7 +288,7 @@ function closeMark(
   if (mark.type === 'tuplet') {
     const count = elements
       .slice(open.start, end + 1)
-      .filter((element) => element.kind === 'note').length
+      .filter((element) => element.kind === 'note' || element.kind === 'sustain').length
     mark.caption = String(count)
   }
   return mark
@@ -298,6 +299,7 @@ function parseMusicLine(
   context: ParseContext,
   carriedCurvedMarks: OpenMark[] = [],
   allowContinuation = false,
+  carriedVoltaMarks: OpenMark[] = [],
 ): ParsedMusicLine {
   const elements: MusicElement[] = []
   const marks: Mark[] = []
@@ -309,6 +311,7 @@ function parseMusicLine(
   const pendingCurvedCodes: string[] = []
   let cursor = 0
   let attachedCarriedMarks = false
+  let attachedCarriedVoltas = false
 
   const activatePendingCurvedMarks = (): void => {
     curvedMarks.push(...pendingCurvedMarks.splice(0))
@@ -332,6 +335,19 @@ function parseMusicLine(
       })
     })
     attachedCarriedMarks = true
+  }
+
+  const attachCarriedVoltaMarks = (elementIndex: number): void => {
+    if (attachedCarriedVoltas || carriedVoltaMarks.length === 0) return
+    carriedVoltaMarks.forEach((mark) => {
+      voltaMarks.push({
+        ...mark,
+        start: elementIndex,
+        sourceIndex: 0,
+        continuationFromPrevious: true,
+      })
+    })
+    attachedCarriedVoltas = true
   }
 
   while (cursor < source.length) {
@@ -381,6 +397,7 @@ function parseMusicLine(
         cursor += 1
       } else {
         elements.push(parsed.barline)
+        attachCarriedVoltaMarks(elements.length - 1)
         cursor = parsed.next
       }
       continue
@@ -659,7 +676,10 @@ function parseMusicLine(
         cursor += 1
         continue
       }
-      const value = source.slice(cursor + 1, end)
+      const value = source
+        .slice(cursor + 1, end)
+        .replace(/\s+/g, '')
+        .replaceAll('_', ' ')
       const attachIndex = lastAttachableIndex(elements)
       const attachable = attachIndex === undefined ? undefined : elements[attachIndex]
       if (attachable?.kind === 'note') {
@@ -668,9 +688,8 @@ function parseMusicLine(
         const meter = parseMeter(value, false)
         if (value.trimStart().startsWith('p:') && meter !== undefined) {
           attachable.temporaryMeter = meter
-        } else {
-          attachable.annotation = value
         }
+        attachable.code += `'${value}'`
       } else {
         report(
           context,
@@ -702,6 +721,7 @@ function parseMusicLine(
     report(context, 'unclosed-mark', `Unclosed '${open.type}' mark.`, open.sourceIndex)
   }
   const carriedOutput: OpenMark[] = []
+  const carriedVoltaOutput: OpenMark[] = []
   const lineEnd = lastTimedIndex(elements)
   if (allowContinuation && lineEnd !== undefined) {
     curvedMarks.forEach((open) => {
@@ -725,11 +745,33 @@ function parseMusicLine(
   for (const open of dynamicMarks) {
     report(context, 'unclosed-dynamic', `Unclosed '${open.type}' mark.`, open.sourceIndex)
   }
-  for (const open of voltaMarks) {
-    report(context, 'unclosed-volta', 'Unclosed volta mark.', open.sourceIndex)
+  const voltaLineEnd = lastAttachableIndex(elements)
+  if (allowContinuation && voltaLineEnd !== undefined) {
+    voltaMarks.forEach((open) => {
+      const mark = closeMark(open, voltaLineEnd, source.length, context, elements)
+      mark.continuationToNext = true
+      marks.push(mark)
+      carriedVoltaOutput.push({
+        type: 'volta',
+        start: 0,
+        level: open.level,
+        sourceIndex: open.sourceIndex,
+        ...(open.caption === undefined ? {} : { caption: open.caption }),
+        ...(open.openEnd === undefined ? {} : { openEnd: open.openEnd }),
+      })
+    })
+  } else {
+    for (const open of voltaMarks) {
+      report(context, 'unclosed-volta', 'Unclosed volta mark.', open.sourceIndex)
+    }
   }
 
-  return { elements, marks, carriedCurvedMarks: carriedOutput }
+  return {
+    elements,
+    marks,
+    carriedCurvedMarks: carriedOutput,
+    carriedVoltaMarks: carriedVoltaOutput,
+  }
 }
 
 function isCjkCharacter(char: string): boolean {
@@ -909,22 +951,32 @@ function parseMetadata(
     return true
   }
   if (prefix === 'P') {
-    const matches = [...value.matchAll(/(\()?\s*(\d+)\s*\/\s*(\d+)\s*(\))?/g)]
+    const matches = [...value.matchAll(/\d+\s*\/\s*\d+/g)]
     if (matches.length === 0) {
       report(context, 'invalid-meter', `Invalid meter '${value}'.`, 0, value.length, 'error')
     } else {
-      for (const match of matches) {
-        metadata.meters.push({
-          numerator: Number(match[2]),
-          denominator: Number(match[3]),
-          parenthesized: match[1] === '(' && match[4] === ')',
-        })
-      }
+      const groupRanges = [...value.matchAll(/\([^)]*\)/g)].map((match) => ({
+        start: match.index,
+        end: match.index + match[0].length,
+      }))
+      metadata.meters = matches.map((match) => {
+        const [numerator = '', denominator = ''] = match[0].split('/').map((part) => part.trim())
+        const index = match.index
+        return {
+          numerator: Number(numerator),
+          denominator: Number(denominator),
+          parenthesized: groupRanges.some((range) => index > range.start && index < range.end),
+        }
+      })
     }
     return true
   }
   if (prefix === 'J') {
-    metadata.tempos.push(/^\d+(?:\.\d+)?$/.test(value) ? Number(value) : value)
+    const tempo = /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : value
+    const numeric = metadata.tempos.find((item): item is number => typeof item === 'number')
+    const text = metadata.tempos.find((item): item is string => typeof item === 'string')
+    if (typeof tempo === 'number' && numeric === undefined) metadata.tempos.unshift(tempo)
+    if (typeof tempo === 'string' && text === undefined) metadata.tempos.push(tempo)
     return true
   }
   if (prefix === 'Y') {
@@ -960,6 +1012,8 @@ export function parse(input: string): ScoreDocument {
   let currentGroup: VoiceGroup | undefined
   const continuationsByVoice = new Map<number, OpenMark[]>()
   const continuationLinesByVoice = new Map<number, ScoreLine>()
+  const voltaContinuationsByVoice = new Map<number, OpenMark[]>()
+  const voltaContinuationLinesByVoice = new Map<number, ScoreLine>()
   let previousMusicVoice: number | undefined
   let lineOffset = 0
 
@@ -969,8 +1023,15 @@ export function parse(input: string): ScoreDocument {
         ({ continuationToNext }) => continuationToNext !== true,
       )
     })
+    voltaContinuationLinesByVoice.forEach((scoreLine) => {
+      scoreLine.marks = scoreLine.marks.filter(
+        ({ continuationToNext }) => continuationToNext !== true,
+      )
+    })
     continuationLinesByVoice.clear()
     continuationsByVoice.clear()
+    voltaContinuationLinesByVoice.clear()
+    voltaContinuationsByVoice.clear()
   }
 
   const reportDanglingContinuations = (line: number, offset: number): void => {
@@ -980,6 +1041,16 @@ export function parse(input: string): ScoreDocument {
           severity: 'warning',
           code: 'unclosed-mark',
           message: `Unclosed '${mark.type}' mark.`,
+          source: metadataLineLocation(line, offset, 0),
+        })
+      })
+    })
+    voltaContinuationsByVoice.forEach((marks) => {
+      marks.forEach(() => {
+        diagnostics.push({
+          severity: 'warning',
+          code: 'unclosed-volta',
+          message: 'Unclosed volta mark.',
           source: metadataLineLocation(line, offset, 0),
         })
       })
@@ -995,6 +1066,8 @@ export function parse(input: string): ScoreDocument {
       return
     }
     if (trimmed === '[fenye]') {
+      reportDanglingContinuations(lineNumber, lineOffset)
+      discardContinuations()
       page = { index: pages.length, groups: [] }
       pages.push(page)
       currentGroup = undefined
@@ -1056,7 +1129,13 @@ export function parse(input: string): ScoreDocument {
           value.length,
         )
       }
-      const parsed = parseMusicLine(value, context, continuationsByVoice.get(voice) ?? [], true)
+      const parsed = parseMusicLine(
+        value,
+        context,
+        continuationsByVoice.get(voice) ?? [],
+        true,
+        voltaContinuationsByVoice.get(voice) ?? [],
+      )
       const scoreLine: ScoreLine = {
         voice,
         elements: parsed.elements,
@@ -1073,6 +1152,13 @@ export function parse(input: string): ScoreDocument {
       } else {
         continuationsByVoice.set(voice, parsed.carriedCurvedMarks)
         continuationLinesByVoice.set(voice, scoreLine)
+      }
+      if (parsed.carriedVoltaMarks.length === 0) {
+        voltaContinuationsByVoice.delete(voice)
+        voltaContinuationLinesByVoice.delete(voice)
+      } else {
+        voltaContinuationsByVoice.set(voice, parsed.carriedVoltaMarks)
+        voltaContinuationLinesByVoice.set(voice, scoreLine)
       }
       previousMusicVoice = voice
       lineOffset += rawLine.length + 1
