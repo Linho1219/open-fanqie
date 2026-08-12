@@ -81,6 +81,7 @@ export interface LineLayout {
 export interface VoiceGroupLayout {
   lines: LineLayout[]
   endX: number
+  voiceBraceX?: number
 }
 
 function durationInQuarterNotes(element: TimedElement): number {
@@ -307,6 +308,7 @@ export function layoutVoiceGroup(
   group: VoiceGroup,
   startX: number,
   maximumX = Number.POSITIVE_INFINITY,
+  voiceColumnWidth = 0,
 ): VoiceGroupLayout {
   const analyzed = group.voices.map(analyzeLine)
   const lineLayouts: LineLayout[] = analyzed.map(({ line }) => ({
@@ -317,8 +319,16 @@ export function layoutVoiceGroup(
     xByElement: new Map(),
   }))
   const measureCount = Math.max(0, ...analyzed.map(({ measures }) => measures.length))
+  const voiceBraceMeasure = analyzed.reduce<number | undefined>((first, { measures }) => {
+    const found = measures.findIndex(({ barline }) =>
+      barline.element?.ornaments.some(({ name }) => name === 'sbf'),
+    )
+    if (found < 0) return first
+    return first === undefined ? found : Math.min(first, found)
+  }, undefined)
   let measureStart = startX
   let endX = startX
+  let voiceBraceX: number | undefined
 
   for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
     const beatCount = Math.max(
@@ -437,6 +447,10 @@ export function layoutVoiceGroup(
       beatCount === 0 && closures.length > 0 && closures.every(({ type }) => type === 'hidden')
     endX = barX
     if (!zeroWidthHiddenBar) measureStart = barX + BARLINE_GAP
+    if (measureIndex === voiceBraceMeasure) {
+      measureStart += voiceColumnWidth
+      voiceBraceX = measureStart
+    }
   }
 
   analyzed.forEach((analysis, lineIndex) => {
@@ -583,6 +597,19 @@ export function layoutVoiceGroup(
     output.elements.sort((left, right) => left.elementIndex - right.elementIndex)
   })
 
+  if (voiceBraceMeasure !== undefined) {
+    const nextMeasureTimedElements = lineLayouts.flatMap(({ elements }) =>
+      elements.filter(
+        ({ element, measure }) =>
+          measure === voiceBraceMeasure + 1 &&
+          (element.kind === 'note' || element.kind === 'sustain'),
+      ),
+    )
+    if (nextMeasureTimedElements.length > 0) {
+      voiceBraceX = Math.min(...nextMeasureTimedElements.map(({ x }) => x))
+    }
+  }
+
   const availableWidth = maximumX - startX
   const naturalWidth = endX - startX
   const fillRatio = naturalWidth / availableWidth
@@ -633,8 +660,13 @@ export function layoutVoiceGroup(
           positioned.x = maximumX
         })
     })
+    if (voiceBraceX !== undefined) voiceBraceX = compress(voiceBraceX)
     endX = maximumX
   }
 
-  return { lines: lineLayouts, endX }
+  return {
+    lines: lineLayouts,
+    endX,
+    ...(voiceBraceX === undefined ? {} : { voiceBraceX }),
+  }
 }

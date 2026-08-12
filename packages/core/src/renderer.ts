@@ -455,7 +455,7 @@ function renderBarline(
     'repeat-end': '|y',
     'repeat-both': '|l',
     hidden: '|n',
-    invisible: '|none',
+    invisible: '|w',
   } as const
   const sourceCodes = {
     normal: '|',
@@ -468,11 +468,22 @@ function renderBarline(
     invisible: '|*',
   } as const
   const type = barline?.type ?? 'normal'
-  const suffix = barline === undefined ? '' : barline.code.slice(sourceCodes[type].length)
+  let suffix = barline === undefined ? '' : barline.code.slice(sourceCodes[type].length)
+  if (type === 'repeat-end' && suffix.startsWith('|')) suffix = `j${suffix.slice(1)}`
   const code = synthetic ? '|w' : `${normalizedCodes[type]}${suffix}`
-  if (type === 'hidden' || type === 'invisible') {
+  if (type === 'hidden') {
     return [
       `<use x="${formatNumber(x)}" y="${formatNumber(y)}" xlink:href="#xiaojiexian_none" notepos="${escapeXml(notepos)}" time="0" audio="" code="${code}" xmlns:xlink="http://www.w3.org/1999/xlink"></use>`,
+    ]
+  }
+  if (type === 'invisible') {
+    return [
+      registry.use('xiaojiexian_weibu', x, y, {
+        notepos,
+        time: 0,
+        audio: '',
+        code,
+      }),
     ]
   }
   const id = synthetic ? 'xiaojiexian_weibu' : BARLINE_GLYPH_IDS[type]
@@ -729,6 +740,7 @@ function renderLyrics(
   lineOrdinal: number,
   y: number,
   config: ResolvedPageConfig,
+  registry: GlyphRegistry,
   musicToLyric: number,
   lyricToLyric: number,
 ): string[] {
@@ -741,6 +753,7 @@ function renderLyrics(
   })
   layout.line.lyrics.forEach((lyric, lyricIndex) => {
     const lyricY = y + 25 + musicToLyric + lyricIndex * (config.lyricSize + lyricToLyric)
+    const lyricPitch = config.lyricSize + lyricToLyric
     if (lyric.annotation !== undefined) {
       output.push(
         text(lyric.annotation, (notePositions[0]?.x ?? config.marginLeft) - 10, lyricY, {
@@ -754,6 +767,16 @@ function renderLyrics(
     }
     notePositions.forEach((positioned, index) => {
       const syllable = lyric.syllables[index]
+      if (syllable?.leftBrace === true || syllable?.rightBrace === true) {
+        const id = syllable.leftBrace === true ? 'ci_dakuohu_zuo' : 'ci_dakuohu_you'
+        const braceX = positioned.x + (syllable.leftBrace === true ? -15 : 15)
+        const braceLine = Math.max(0, lyricIndex - 1)
+        const braceY = y + 25 + musicToLyric + braceLine * lyricPitch + lyricPitch * 0.75 - 7
+        registry.register(id)
+        output.push(
+          `<use cx="0" cy="0" xlink:href="#${id}" transform="translate(${formatNumber(braceX)},${formatNumber(braceY)})scale(1,${formatNumber(lyricPitch * 0.15)})" xmlns:xlink="http://www.w3.org/1999/xlink"></use>`,
+        )
+      }
       if (syllable?.text === '') return
       const value = syllable?.text ?? ''
       output.push(
@@ -1005,6 +1028,7 @@ function renderLine(
       lineOrdinal,
       y + (inlineLayerRange(layout.line) === undefined ? 0 : 28),
       config,
+      registry,
       musicToLyric,
       lyricToLyric,
     ),
@@ -1102,10 +1126,29 @@ function renderPage(
     const multiVoice = group.voices.length > 1
     const captionWidth = Math.max(
       0,
-      ...group.voices.map((voice) => [...(voice.caption ?? '')].length * 19),
+      ...group.voices.map((voice) =>
+        [...(voice.caption ?? '')].reduce(
+          (width, character) => width + (/^[\x00-\x7f]$/.test(character) ? 8 : 16),
+          0,
+        ),
+      ),
     )
-    const startX = config.marginLeft + (multiVoice ? 23 : 3) + captionWidth
-    const layout = layoutVoiceGroup(group, startX, config.width - config.marginRight + 3)
+    const hasCaption = group.voices.some(({ caption }) => caption !== undefined && caption !== '')
+    const voiceColumnWidth = !multiVoice ? 0 : hasCaption ? 26 + captionWidth : 20
+    const hasExplicitVoiceBrace = group.voices.some(({ elements }) =>
+      elements.some(
+        (element) =>
+          element.kind === 'barline' && element.ornaments.some(({ name }) => name === 'sbf'),
+      ),
+    )
+    const startX =
+      config.marginLeft + 3 + (multiVoice && !hasExplicitVoiceBrace ? voiceColumnWidth : 0)
+    const layout = layoutVoiceGroup(
+      group,
+      startX,
+      config.width - config.marginRight + 3,
+      hasExplicitVoiceBrace ? voiceColumnWidth : 0,
+    )
     let firstY = y
     let lastY = y
     layout.lines.forEach((lineLayout, index) => {
@@ -1114,7 +1157,7 @@ function renderPage(
       if (index === 0) firstY = y
       if (multiVoice) {
         body.push(
-          text(scoreLine.caption ?? '', startX - 35, y, {
+          text(scoreLine.caption ?? '', (layout.voiceBraceX ?? startX) - 35, y, {
             font: config.lyricFont,
             size: config.lyricSize,
             anchor: 'end',
@@ -1142,11 +1185,7 @@ function renderPage(
       if (index === layout.lines.length - 1) return
     })
     if (multiVoice) {
-      const braceX =
-        layout.lines
-          .flatMap((line) => line.barlines)
-          .find((barline) => barline.element?.ornaments.some(({ name }) => name === 'sbf'))?.x ??
-        startX
+      const braceX = layout.voiceBraceX ?? startX
       body.push(registry.use('shengbufu_shang', braceX, firstY))
       body.push(
         `<line x1="${formatNumber(braceX - 25.5)}" y1="${formatNumber(firstY - 6.5)}" x2="${formatNumber(braceX - 25.5)}" y2="${formatNumber(lastY + 6.5)}" stroke-width="4" stroke="${INK}" fill="none"></line>`,

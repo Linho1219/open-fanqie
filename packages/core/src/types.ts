@@ -121,6 +121,8 @@ export interface Mark {
 export interface LyricSyllable {
   text: string
   trailingPunctuation?: string
+  leftBrace?: boolean
+  rightBrace?: boolean
   source: SourceLocation
 }
 

@@ -84,6 +84,24 @@ describe('bundled legacy examples', () => {
     expect(svg).toContain('<g id="dakuohu_zuo_2"')
     expect(svg).toContain('<g id="dakuohu_you_2"')
     expect(svg).toContain('<g id="custom_4yPJ2wPA6h"')
+    expect(svg.match(/xlink:href="#ci_dakuohu_you"/g)).toHaveLength(2)
+
+    const sbfBarX = Number(
+      svg.match(/<use x="([^"]+)"[^>]+notepos="0_3_22"[^>]+code="\|&sbf"/)?.[1],
+    )
+    const nextNoteX = Number(svg.match(/<use x="([^"]+)"[^>]+notepos="0_3_23"/)?.[1])
+    const voiceBraceX = Number(
+      svg.match(/<use x="([^"]+)"[^>]+xlink:href="#shengbufu_shang"[^>]*>/)?.[1],
+    )
+    const temporaryVoiceLeadX = Number(
+      svg.match(/<use x="([^"]+)"[^>]+notepos="0_9_12"[^>]+code="5"/)?.[1],
+    )
+    const lowerRepeatLeadX = Number(
+      svg.match(/<use x="([^"]+)"[^>]+notepos="0_10_11"[^>]+code="3\(\)"/)?.[1],
+    )
+    expect(nextNoteX).toBeGreaterThan(sbfBarX)
+    expect(voiceBraceX).toBe(nextNoteX)
+    expect(lowerRepeatLeadX).toBe(temporaryVoiceLeadX)
   })
 
   it('renders 太阳出来喜洋洋 with path glyphs for positioned score symbols', () => {

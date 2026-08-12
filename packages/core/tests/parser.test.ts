@@ -155,6 +155,32 @@ Q: 1 - ||
     expect(document.diagnostics).toEqual([])
   })
 
+  it('attaches lyric braces without consuming note slots', () => {
+    const document = parse(`Q: 1 2 3 |\nC: {甲乙}丙`)
+    const syllables = document.pages[0]?.groups[0]?.voices[0]?.lyrics[0]?.syllables
+
+    expect(syllables).toMatchObject([
+      { text: '甲', leftBrace: true },
+      { text: '乙', rightBrace: true },
+      { text: '丙' },
+    ])
+    expect(document.diagnostics).toEqual([])
+  })
+
+  it('parses the barred repeat end as one barline', () => {
+    const document = parse(`Q: 1 :|| 2 |`)
+    const barlines =
+      document.pages[0]?.groups[0]?.voices[0]?.elements.filter(
+        (element) => element.kind === 'barline',
+      ) ?? []
+
+    expect(barlines).toMatchObject([
+      { type: 'repeat-end', code: ':||' },
+      { type: 'normal', code: '|' },
+    ])
+    expect(document.diagnostics).toEqual([])
+  })
+
   it('joins punctuation to the previous lyric syllable after a tilde', () => {
     const document = parse(`Q: 1 2 3 4 5 6 7 |\nC: 喜洋洋~(欧@郎啰`)
     const syllables = document.pages[0]?.groups[0]?.voices[0]?.lyrics[0]?.syllables

@@ -241,6 +241,7 @@ function parseBarline(
 ): { barline: BarlineElement; next: number } | undefined {
   const candidates: Array<[string, BarlineType]> = [
     [':|:', 'repeat-both'],
+    [':||', 'repeat-end'],
     ['||/', 'double'],
     ['|:', 'repeat-start'],
     [':|', 'repeat-end'],
@@ -743,6 +744,7 @@ function parseLyrics(source: string, context: ParseContext): LyricLine {
   const syllables: LyricSyllable[] = []
   let annotation: string | undefined
   let joinNext = false
+  let pendingLeftBrace = false
   let cursor = 0
 
   const push = (text: string, start: number, end: number): void => {
@@ -756,10 +758,15 @@ function parseLyrics(source: string, context: ParseContext): LyricLine {
       joinNext = false
       return
     }
-    syllables.push({
+    const syllable: LyricSyllable = {
       text,
       source: location(context, start, end - start),
-    })
+    }
+    if (pendingLeftBrace) {
+      syllable.leftBrace = true
+      pendingLeftBrace = false
+    }
+    syllables.push(syllable)
     joinNext = false
   }
 
@@ -777,6 +784,19 @@ function parseLyrics(source: string, context: ParseContext): LyricLine {
     }
     if (char === '@') {
       push('', cursor, cursor + 1)
+      cursor += 1
+      continue
+    }
+    if (char === '{') {
+      pendingLeftBrace = true
+      cursor += 1
+      continue
+    }
+    if (char === '}') {
+      if (!pendingLeftBrace) {
+        const previous = syllables[syllables.length - 1]
+        if (previous !== undefined) previous.rightBrace = true
+      }
       cursor += 1
       continue
     }
@@ -838,6 +858,8 @@ function parseLyrics(source: string, context: ParseContext): LyricLine {
     }
     push(source.slice(start, cursor), start, cursor)
   }
+
+  if (pendingLeftBrace) push('', source.length, source.length)
 
   const lyric: LyricLine = {
     syllables,

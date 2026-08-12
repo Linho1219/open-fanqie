@@ -27,6 +27,8 @@ Q: 3 4) |
 Q: 1 2 | {dsb 6, - } 2 - | 3 4 |
 Q: 1 2 {dsb 6, - } 2 - | 3 4 |
 Q: 1 2 | {bz 3&zkh 4&ykh } 5 6 | 7 1 |
+Q: 1 2 |
+C: {甲乙}
 `
 
 const probes = [
@@ -74,6 +76,10 @@ if (!glyphs.has('dakuohu_you_') && glyphs.has('dakuohu_you_2')) {
     'dakuohu_you_',
     glyphs.get('dakuohu_you_2').replace('id="dakuohu_you_2"', 'id="dakuohu_you_"'),
   )
+}
+
+for (const id of ['ci_dakuohu_zuo', 'ci_dakuohu_you']) {
+  if (!glyphs.has(id)) throw new Error(`Failed to extract required lyric brace glyph: ${id}`)
 }
 
 const output = Object.fromEntries([...glyphs].sort(([left], [right]) => left.localeCompare(right)))

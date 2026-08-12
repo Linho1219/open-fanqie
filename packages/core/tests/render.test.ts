@@ -156,6 +156,62 @@ Q2: 1/ 2/ |
     ])
   })
 
+  it('moves the voice-brace column to the first sbf boundary', () => {
+    const svg = render(`
+Q1: 1 2 |&sbf 3 4 |
+Q2: 8 8 |* 5 6 |
+`)
+
+    expect(uses(svg, 1)).toEqual([
+      { x: 83, code: '1' },
+      { x: 120.5, code: '2' },
+      { x: 210.5, code: '3' },
+      { x: 248, code: '4' },
+      { x: 155.5, code: '|&sbf' },
+      { x: 283, code: '|' },
+    ])
+    expect(svg).toContain('x="210.5" y="130" xlink:href="#shengbufu_shang"')
+    expect(svg).toContain('x1="185" y1="123.5"')
+    expect(svg).toContain('x="155.5" y="208" xlink:href="#xiaojiexian_weibu"')
+    expect(svg).toContain('code="|w"')
+  })
+
+  it('anchors a moved voice brace to an accidental-shifted first note', () => {
+    const svg = render(`
+Q1: 1 |&sbf 2# |
+Q2: 8 |* 3 |
+`)
+
+    expect(svg).toContain('x="178" y="130" xlink:href="#shuzi_b_2"')
+    expect(svg).toContain('x="178" y="130" xlink:href="#shengbufu_shang"')
+  })
+
+  it('renders lyric braces as zero-width SVG controls', () => {
+    const svg = render(`Q: 1 2 |\nC: {甲乙}`)
+
+    expect(svg).toContain('<g id="ci_dakuohu_zuo"')
+    expect(svg).toContain('<g id="ci_dakuohu_you"')
+    expect(svg).toContain('xlink:href="#ci_dakuohu_zuo" transform="translate(68,182)scale(1,4.2)"')
+    expect(svg).toContain(
+      'xlink:href="#ci_dakuohu_you" transform="translate(135.5,182)scale(1,4.2)"',
+    )
+    expect(svg).not.toContain('>}</text>')
+  })
+
+  it('keeps voices aligned after a barred repeat end', () => {
+    const svg = render(`
+Q1: 1 - - - | 2 - - - | 3 - - - | {dsb 4 - - - |} 5 - - - |
+Q2: 6 - - - | 7 - - - :|| 1' - - - | 2 - - - |
+`)
+    const upper = uses(svg, 1)
+    const lower = uses(svg, 2)
+
+    expect(upper.find(({ code }) => code === '3')?.x).toBe(
+      lower.find(({ code }) => code === "1'")?.x,
+    )
+    expect(lower.filter(({ code }) => code === '|yj')).toHaveLength(1)
+  })
+
   it('uses reduced spacing throughout quarter-note tuplets', () => {
     const svg = render(`Q: (y1 2 3) 4 |`)
 
