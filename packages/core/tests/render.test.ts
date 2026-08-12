@@ -22,6 +22,25 @@ function elementCount(svg: string, name: 'use' | 'text' | 'line' | 'path'): numb
 }
 
 describe('render', () => {
+  it('matches legacy empty input and nonstandard page selection', () => {
+    expect(render('')).toBe('')
+    expect(render(' ')).toMatch(/^<svg/)
+    expect(render(`Q: 1\n[fenye]\nQ: 2`, { pageNum: -2 })).toBe('noRedraw[fenye]noRedraw[fenye]')
+  })
+
+  it('falls back from inherited page names and tolerates missing legacy glyphs', () => {
+    for (const page of ['toString', 'constructor', '__proto__']) {
+      expect(render('Q: 1 |', { pageConfig: JSON.stringify({ page }) })).toMatch(
+        /^<svg width="1000" height="1415"/,
+      )
+    }
+
+    expect(render('Q: 1 |', { pageConfig: JSON.stringify({ shuzi_font: 'z' }) })).toContain(
+      'xlink:href="#shuzi_z_1"',
+    )
+    expect(render('Q: 1&constructor |')).not.toContain('[object Object]')
+  })
+
   it('renders the full compatibility score without diagnostics', () => {
     const diagnostics: string[] = []
     const output = render(compatibilityScore, {
@@ -359,6 +378,14 @@ Q: 1 2 {bz 3/ 4/} 5 6 |
     expect(leftOnly).not.toMatch(/xlink:href="#dakuohu_you_/)
     expect(leftOnly).toContain('x="210.5" y="130" xlink:href="#shuzi_b_3"')
     expect(leftOnly).toContain('x="283" y="186" xlink:href="#xiaojiexian"')
+  })
+
+  it('drops a terminal temporary voice like the legacy renderer', () => {
+    const svg = render(`Q: 1 {dsb 2#'//[3/]}`)
+
+    expect(svg).not.toContain('code="2#&apos;//[3/]"')
+    expect(svg).not.toContain('xlink:href="#shuzi_b_2"')
+    expect(svg).not.toContain('<g id="qy0_0"')
   })
 
   it('splits same-page cross-line slurs at the page margins', () => {

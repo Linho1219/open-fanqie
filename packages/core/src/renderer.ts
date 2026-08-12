@@ -8,14 +8,7 @@ import {
   GlyphRegistry,
   ornamentGlyph,
 } from './glyphs'
-import {
-  BARLINE_GAP,
-  layoutVoiceGroup,
-  PLAIN_NOTE_STEP,
-  UNDERLINED_NOTE_STEP,
-  type LineLayout,
-  type PositionedElement,
-} from './layout'
+import { layoutVoiceGroup, type LineLayout, type PositionedElement } from './layout'
 import { parse } from './parser'
 import type {
   BarlineElement,
@@ -815,10 +808,6 @@ function renderLyrics(
   return output
 }
 
-function inlineElementStep(element: NoteElement | SustainElement): number {
-  return element.kind === 'note' && element.duration > 4 ? UNDERLINED_NOTE_STEP : PLAIN_NOTE_STEP
-}
-
 function renderInlineLayer(
   layer: InlineLayerElement,
   startX: number,
@@ -882,34 +871,9 @@ function renderInlineLayer(
     )
     return output
   }
-  let x = startX
-  layer.elements.forEach((element) => {
-    if (element.kind === 'note') {
-      if (!element.hidden) {
-        const id =
-          layer.role === 'accompaniment' && element.pitch !== 9
-            ? `shuzi_${config.numberStyle}_bian_${element.pitch}`
-            : element.pitch === 9
-              ? 'shuzi_x'
-              : `shuzi_${config.numberStyle}_${element.pitch}`
-        output.push(registry.use(id, x, y))
-        output.push(
-          ...(layer.role === 'accompaniment'
-            ? renderInlineOrnaments(element.ornaments, x, y, registry)
-            : renderOrnaments(element.ornaments, x, y, registry)),
-        )
-      }
-      x += inlineElementStep(element)
-    } else if (element.kind === 'sustain') {
-      output.push(registry.use('yanyinfu', x, y))
-      x += PLAIN_NOTE_STEP
-    } else if (element.kind === 'barline') {
-      if (element.type !== 'hidden' && element.type !== 'invisible') {
-        output.push(registry.use(BARLINE_GLYPH_IDS[element.type], x, y))
-      }
-      x += BARLINE_GAP
-    }
-  })
+  // The legacy renderer drops an inline layer at the end of a music line.
+  // `layout` is absent only for that terminal-layer case.
+  void startX
   return output
 }
 
@@ -1208,6 +1172,7 @@ function splitCustomCode(customCode: string | null | undefined): string[] {
 
 /** Render a Fanqie score using the legacy API's SVG-page response format. */
 export function render(dsl: string, options: RenderOptions = {}): string {
+  if (dsl === '') return ''
   const document = parse(dsl)
   const diagnostics: Diagnostic[] = [...document.diagnostics]
   const config = resolvePageConfig(options.pageConfig, diagnostics)
@@ -1215,7 +1180,7 @@ export function render(dsl: string, options: RenderOptions = {}): string {
   options.onDiagnostics?.(diagnostics)
   const requestedPage = options.pageNum ?? -1
   const pages = document.pages.map((page) =>
-    requestedPage >= 0 && requestedPage !== page.index
+    requestedPage !== -1 && requestedPage !== page.index
       ? 'noRedraw'
       : renderPage(page, document.metadata, config, customPages[page.index] ?? ''),
   )

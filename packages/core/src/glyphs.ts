@@ -3,6 +3,10 @@ import type { Accidental, BarlineType, Ornament } from './types'
 
 const GLYPHS: Readonly<Record<string, string>> = staticGlyphs
 
+function ownValue<T>(values: Readonly<Record<string, T>>, key: string): T | undefined {
+  return Object.hasOwn(values, key) ? values[key] : undefined
+}
+
 export const ORNAMENT_GLYPH_IDS: Readonly<Record<string, string>> = {
   zkh: 'kuohu_zuo',
   ykh: 'kuohu_you',
@@ -86,11 +90,12 @@ function attributes(values: Readonly<Record<string, string | number | undefined>
 export class GlyphRegistry {
   readonly #definitions = new Map<string, string>()
 
-  register(id: string): void {
-    if (this.#definitions.has(id)) return
-    const definition = GLYPHS[id]
-    if (definition === undefined) throw new Error(`Unknown static SVG glyph: ${id}`)
+  register(id: string): boolean {
+    if (this.#definitions.has(id)) return true
+    const definition = ownValue(GLYPHS, id)
+    if (definition === undefined) return false
     this.#definitions.set(id, definition)
+    return true
   }
 
   define(id: string, body: string): void {
@@ -105,7 +110,8 @@ export class GlyphRegistry {
     extra: Readonly<Record<string, string | number | undefined>> = {},
   ): string {
     this.register(id)
-    return this.useDefined(id, x, y, extra)
+    const suffix = attributes(extra)
+    return `<use x="${formatNumber(x)}" y="${formatNumber(y)}" xlink:href="#${escapeXml(id)}"${suffix === '' ? '' : ` ${suffix}`} xmlns:xlink="http://www.w3.org/1999/xlink"></use>`
   }
 
   useDefined(
@@ -125,7 +131,7 @@ export class GlyphRegistry {
 }
 
 export function ornamentGlyph(ornament: Ornament): string | undefined {
-  const base = ORNAMENT_GLYPH_IDS[ornament.name]
+  const base = ownValue(ORNAMENT_GLYPH_IDS, ornament.name)
   if (base === undefined) return undefined
   if (
     (ornament.name === 'sby' || ornament.name === 'xby' || ornament.name === 'cy') &&

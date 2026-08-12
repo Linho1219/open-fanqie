@@ -98,7 +98,7 @@ export function resolvePageConfig(
 ): ResolvedPageConfig {
   const parsed = parseInput(input, diagnostics)
   const raw = { ...DEFAULT_PAGE_CONFIG, ...parsed }
-  const page = raw.page in PAGE_SIZES ? raw.page : DEFAULT_PAGE_CONFIG.page
+  const page = Object.hasOwn(PAGE_SIZES, raw.page) ? raw.page : DEFAULT_PAGE_CONFIG.page
   if (page !== raw.page) diagnostics.push(diagnostic(`Unknown page preset '${String(raw.page)}'.`))
   const size = PAGE_SIZES[page]
   const slurIndex = Number(raw.lianyinxian_type)
