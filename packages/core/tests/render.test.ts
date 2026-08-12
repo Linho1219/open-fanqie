@@ -63,9 +63,9 @@ describe('render', () => {
         elementCount(page, 'path'),
       ]),
     ).toEqual([
-      [391, 141, 77, 11],
-      [692, 359, 210, 10],
-      [603, 276, 150, 20],
+      [391, 141, 68, 11],
+      [692, 359, 203, 10],
+      [603, 276, 141, 20],
     ])
     expect(pages[0]).toContain('x="141" y="266" xlink:href="#shuzi_b_0"')
     expect(pages[1]).toContain('x="103" y="130" xlink:href="#shuzi_b_6"')
@@ -217,6 +217,47 @@ Q2: 1/ 2/ |
     ])
   })
 
+  it('keeps later columns aligned when one voice has a dotted note', () => {
+    const svg = render(`
+Q1: 1. 2/ 3 4 |
+Q2: 5 6 7 0 |
+`)
+
+    expect(uses(svg, 1)).toEqual([
+      { x: 103, code: '1.' },
+      { x: 153, code: '2/' },
+      { x: 190.5, code: '3' },
+      { x: 228, code: '4' },
+      { x: 263, code: '|' },
+    ])
+    expect(uses(svg, 2)).toEqual([
+      { x: 103, code: '5' },
+      { x: 153, code: '6' },
+      { x: 190.5, code: '7' },
+      { x: 228, code: '0' },
+      { x: 263, code: '|' },
+    ])
+  })
+
+  it('groups underlines by quarter-note time without treating rests as boundaries', () => {
+    const withRests = render(`Q: 3/ 4// 4// 0/ 5// 4// 0/ 3/ 2/ 1/ |`)
+    const withNotes = render(`Q: 3/ 4// 4// 6/ 5// 4// 7/ 3/ 2/ 1/ |`)
+    const beams = (svg: string): string[] =>
+      [...svg.matchAll(/<line x1="([^"]+)"[^>]+x2="([^"]+)"[^>]+data-type="jianshixian"/g)].map(
+        (match) => `${match[1]}:${match[2]}`,
+      )
+
+    expect(beams(withRests)).toEqual(beams(withNotes))
+    expect(beams(withRests)).toEqual([
+      '77:139',
+      '102:139',
+      '164.5:226.5',
+      '189.5:226.5',
+      '252:289',
+      '314.5:351.5',
+    ])
+  })
+
   it('moves the voice-brace column to the first sbf boundary', () => {
     const svg = render(`
 Q1: 1 2 |&sbf 3 4 |
@@ -235,6 +276,21 @@ Q2: 8 8 |* 5 6 |
     expect(svg).toContain('x1="185" y1="123.5"')
     expect(svg).toContain('x="155.5" y="208" xlink:href="#xiaojiexian_weibu"')
     expect(svg).toContain('code="|w"')
+  })
+
+  it('keeps the sbf voice-brace column uncompressed in a fitted line', () => {
+    const svg = render(`
+Q1: 4. 4/ 5 6 | (5 4/ 3/) 2 - | 7, 7,/ 6,/ (5, 6,) | 1 - - - |&sbf 1' - 6 - | 4. 5/ 6 - |
+Q2: 8 8 8 8 |* 8 8 8 8 |* 8 8 8 8 |* 8 8 8 8 |* 0 1 4 - | 6 - - 4/ 3/ |
+`)
+    const upper = uses(svg, 1)
+    const sbfBar = upper.find(({ code }) => code === '|&sbf')
+    const braceX = Number(svg.match(/<use x="([^"]+)"[^>]+xlink:href="#shengbufu_shang"/)?.[1])
+
+    expect(sbfBar?.x).toBeCloseTo(616.12658227848, 10)
+    expect(braceX).toBeCloseTo(660.75949367089, 10)
+    expect(braceX - (sbfBar?.x ?? Number.NaN)).toBeCloseTo(44.63291139241, 10)
+    expect(upper.at(-1)).toEqual({ x: 923, code: '|' })
   })
 
   it('anchors a moved voice brace to an accidental-shifted first note', () => {
@@ -400,6 +456,31 @@ Q: 1 2 {bz 3/ 4/} 5 6 |
     expect(svg).toContain('x="338" y="158" xlink:href="#shuzi_b_3"')
   })
 
+  it('uses a synthetic tail bar when a temporary voice omits its own barline', () => {
+    const synthetic = render(`Q: 1 2 | {dsb 3 4} 5 6 |`)
+    const explicit = render(`Q: 1 2 | {dsb 3 4 |} 5 6 |`)
+
+    expect(synthetic).toContain('x="283" y="130" xlink:href="#xiaojiexian_weibu"')
+    expect(explicit).toContain('x="283" y="130" xlink:href="#xiaojiexian"')
+    expect(explicit).not.toContain('x="283" y="130" xlink:href="#xiaojiexian_weibu"')
+  })
+
+  it('uses tuplet duration when locating a temporary voice closing bar', () => {
+    const svg = render(`Q: 1 2 | {dsb (y3 4 5) 6} (y1 2 3) 4 | 5 6 |`)
+
+    expect(svg).toContain('x="333" y="158" xlink:href="#dakuohu_you_2"')
+    expect(svg).toContain('x="353" y="158" xlink:href="#xiaojiexian"')
+    expect(svg).toContain('x="388" y="158" xlink:href="#shuzi_b_5"')
+  })
+
+  it('positions each lower range when a line has multiple temporary voices', () => {
+    const svg = render(`Q: 1 2 {dsb 3 4} 5 6 {dsb 7 1} 2 3 |`)
+
+    expect(svg).toContain('x="158" y="186" xlink:href="#shuzi_b_5"')
+    expect(svg).toContain('x="233" y="186" xlink:href="#shuzi_b_2"')
+    expect(svg).toContain('x="233" y="130" xlink:href="#shuzi_b_7"')
+  })
+
   it('closes a temporary voice after its matching multi-measure duration', () => {
     const svg = render(`Q: 3 4 | {dsb 1 2 3 4 | 5 6 7 1'} 5 6 7 1' | 1' 7 6 5 | 5 5 |`)
 
@@ -412,6 +493,27 @@ Q: 1 2 {bz 3/ 4/} 5 6 |
     expect(svg).toContain('x="751.5" y="158" xlink:href="#xiaojiexian"')
     expect(svg).toContain('x="800.5" y="158" xlink:href="#shuzi_b_5"')
     expect(svg).toContain('x="923" y="158" xlink:href="#xiaojiexian"')
+  })
+
+  it('aligns a temporary voice with all sibling voices in the global grid', () => {
+    const svg = render(`
+Q1: 4. 4/ 4 3/ 2/ | 1 - - - :| 5 - - - | {dsb 1 - 6 - | 4. 5/ 6 - | 7 7/ 7/ (7 6/ 5/) } 6 - 4 - |]/ 2. 3/ 4 - | 5 5/ 5/ (4 3/ 2/) |
+Q2: (2 - - - | 3) - - - :|| 3 - - - | 0 1 4 - | 6 - - 4/ 3/ | 2 - - 1/ 2/ |
+`)
+    const at = (y: number, href: string): number[] =>
+      [...svg.matchAll(new RegExp(`<use x="([^"]+)" y="${y}" xlink:href="#${href}"`, 'g'))].map(
+        (match) => Number(match[1]),
+      )
+
+    expect(at(130, 'shuzi_b_1')).toContain(513.21951219512)
+    expect(at(186, 'shuzi_b_6')).toContain(513.21951219512)
+    expect(at(264, 'shuzi_b_0')).toContain(513.21951219512)
+    expect(at(130, 'xiaojiexian')).toContain(613.23170731707)
+    expect(at(186, 'xiaojiexian')).toContain(613.23170731707)
+    expect(at(264, 'xiaojiexian')).toContain(613.23170731707)
+    expect(at(130, 'shuzi_b_4')).toContain(636.96341463415)
+    expect(at(186, 'shuzi_b_2')).toContain(636.96341463415)
+    expect(at(264, 'shuzi_b_6')).toContain(636.96341463415)
   })
 
   it('uses reduced SVG parentheses for temporary accompaniment', () => {

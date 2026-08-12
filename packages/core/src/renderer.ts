@@ -558,31 +558,34 @@ function renderUnderlines(
   return output
 }
 
-function inlineLayerRange(
+function inlineLayerRanges(
   line: ScoreLine,
-): { start: number; end: number; closesWithinLine: boolean } | undefined {
-  const start = line.elements.findIndex(
-    (element) => element.kind === 'inline-layer' && element.role === 'voice',
-  )
-  if (start < 0) return undefined
-  const followingBarline = line.elements.findIndex(
-    (element, index) => index > start && element.kind === 'barline',
-  )
-  const end = followingBarline < 0 ? line.elements.length - 1 : followingBarline
-  const closesWithinLine = line.elements.some(
-    (element, index) => index > end && (element.kind === 'note' || element.kind === 'sustain'),
-  )
-  return { start, end, closesWithinLine }
+): Array<{ start: number; end: number; closesWithinLine: boolean }> {
+  return line.elements.flatMap((element, start) => {
+    if (element.kind !== 'inline-layer' || element.role !== 'voice') return []
+    const relativeBarline = line.elements
+      .slice(start + 1)
+      .findIndex((candidate) => candidate.kind === 'barline')
+    const followingBarline = relativeBarline < 0 ? -1 : start + 1 + relativeBarline
+    const end = followingBarline < 0 ? line.elements.length - 1 : followingBarline
+    const closesWithinLine = line.elements.some(
+      (candidate, index) =>
+        index > end && (candidate.kind === 'note' || candidate.kind === 'sustain'),
+    )
+    return [{ start, end, closesWithinLine }]
+  })
 }
 
 function mainElementY(layout: LineLayout, elementIndex: number, y: number): number {
-  const layer = layout.inlineLayers.find(({ element }) => element.role === 'voice')
-  if (layer === undefined) return y
-  const end = layer.closingElementIndex ?? layout.line.elements.length - 1
-  return elementIndex > layer.elementIndex &&
-    (layer.closesWithinLine === true ? elementIndex < end : elementIndex <= end)
-    ? y + 28
-    : y
+  const insideTemporaryVoice = layout.inlineLayers.some((layer) => {
+    if (layer.element.role !== 'voice') return false
+    const end = layer.closingElementIndex ?? layout.line.elements.length - 1
+    return (
+      elementIndex > layer.elementIndex &&
+      (layer.closesWithinLine === true ? elementIndex < end : elementIndex <= end)
+    )
+  })
+  return insideTemporaryVoice ? y + 28 : y
 }
 
 function nearestMarkX(
@@ -1010,7 +1013,7 @@ function renderLine(
       layout,
       pageIndex,
       lineOrdinal,
-      y + (inlineLayerRange(layout.line) === undefined ? 0 : 28),
+      y + (inlineLayerRanges(layout.line).length === 0 ? 0 : 28),
       config,
       registry,
       musicToLyric,
@@ -1068,7 +1071,7 @@ function rowAdvance(
       : spacing.musicToLyric +
         line.lyrics.length * config.lyricSize +
         Math.max(0, line.lyrics.length * spacing.lyricToLyric - 10)
-  const temporaryVoiceBottom = inlineLayerRange(line) === undefined ? 0 : 28
+  const temporaryVoiceBottom = inlineLayerRanges(line).length === 0 ? 0 : 28
   const musicHeight = line.lyrics.length === 0 ? 38 : 35
   return musicHeight + lyricHeight + spacing.lineGap + temporaryVoiceBottom
 }

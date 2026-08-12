@@ -1,4 +1,11 @@
-import type { BarlineElement, InlineLayerElement, Mark, ScoreLine, VoiceGroup } from './types'
+import type {
+  BarlineElement,
+  InlineLayerElement,
+  Mark,
+  MusicElement,
+  ScoreLine,
+  VoiceGroup,
+} from './types'
 import { durationInQuarterNotes, type TimedElement, tupletScale } from './timing'
 
 export const PLAIN_NOTE_STEP = 37.5
@@ -31,6 +38,22 @@ interface AnalyzedLine {
   line: ScoreLine
   measures: AnalyzedMeasure[]
   inlineLayers: Array<{ element: InlineLayerElement; elementIndex: number }>
+}
+
+interface InlineVoicePlan {
+  hostLineIndex: number
+  element: InlineLayerElement
+  elementIndex: number
+  inlineOffset: number
+  upperLine: ScoreLine
+  virtualAnalysis: AnalyzedLine
+  startMeasure?: number
+  closingMeasure?: number
+  closingBarOriginal?: number
+  upperEndsWithBarline: boolean
+  hasLeftBrace: boolean
+  closesWithinLine: boolean
+  fullHeightRightBrace: boolean
 }
 
 export interface PositionedElement {
@@ -75,10 +98,10 @@ export interface VoiceGroupLayout {
   voiceBraceX?: number
 }
 
-function timedDuration(
-  elements: readonly (TimedElement | BarlineElement)[],
-  marks: Mark[],
-): number {
+function tupletScalesByIndex(
+  elements: readonly MusicElement[],
+  marks: readonly Mark[],
+): Map<number, number> {
   const tupletScaleByIndex = new Map<number, number>()
   marks
     .filter(({ type }) => type === 'tuplet')
@@ -94,6 +117,11 @@ function timedDuration(
       if (scale === undefined) return
       timedIndices.forEach((index) => tupletScaleByIndex.set(index, scale))
     })
+  return tupletScaleByIndex
+}
+
+function timedDuration(elements: readonly MusicElement[], marks: readonly Mark[]): number {
+  const tupletScaleByIndex = tupletScalesByIndex(elements, marks)
   return elements.reduce(
     (total, element, index) =>
       element.kind === 'note' || element.kind === 'sustain'
@@ -183,13 +211,13 @@ function analyzeLine(line: ScoreLine): AnalyzedLine {
   const inlineLayers: AnalyzedLine['inlineLayers'] = []
   let beats: AnalyzedItem[][] = []
   let beat = -1
-  let beatTime = 0
+  let measureTime = 0
+  let previousNaturalBeat: number | undefined
   let nextBoundary: 'join' | 'split' | undefined
   let endedWithBarline = false
-  const tupletScales = new Map<number, number>()
+  const tupletScales = tupletScalesByIndex(line.elements, line.marks)
   const tupletGroups = new Map<number, Mark>()
   let previousTimedIndex: number | undefined
-  let previousTimedElement: TimedElement | undefined
   const lyricOverflow = lyricOverflowByElement(line)
 
   line.marks
@@ -202,10 +230,7 @@ function analyzeLine(line: ScoreLine): AnalyzedLine {
           ? [elementIndex]
           : [],
       )
-      const scale = tupletScale(mark)
-      if (scale === undefined) return
       timedIndices.forEach((elementIndex) => {
-        tupletScales.set(elementIndex, scale)
         tupletGroups.set(elementIndex, mark)
       })
     })
@@ -214,9 +239,9 @@ function analyzeLine(line: ScoreLine): AnalyzedLine {
     measures.push({ beats, barline })
     beats = []
     beat = -1
-    beatTime = 0
+    measureTime = 0
+    previousNaturalBeat = undefined
     previousTimedIndex = undefined
-    previousTimedElement = undefined
     nextBoundary = undefined
   }
 
@@ -240,17 +265,15 @@ function analyzeLine(line: ScoreLine): AnalyzedLine {
       previousTimedIndex !== undefined &&
       tupletGroups.get(previousTimedIndex) === tupletGroups.get(elementIndex) &&
       tupletGroups.has(elementIndex)
+    const naturalBeat = Math.floor(measureTime + 1e-9)
     const beginsBeat =
       beat < 0 ||
       nextBoundary === 'split' ||
       (nextBoundary !== 'join' &&
-        previousTimedElement?.kind === 'note' &&
-        previousTimedElement.sound === 'rest') ||
-      (nextBoundary !== 'join' && !continuesTuplet && beatTime >= 1 - 1e-9)
-    if (beginsBeat) {
-      beat += 1
-      beatTime = 0
-    }
+        !continuesTuplet &&
+        previousNaturalBeat !== undefined &&
+        naturalBeat !== previousNaturalBeat)
+    if (beginsBeat) beat += 1
     const currentBeat = Math.max(0, beat)
     while (beats.length <= currentBeat) beats.push([])
     const items = beats[currentBeat]
@@ -263,8 +286,8 @@ function analyzeLine(line: ScoreLine): AnalyzedLine {
       lyricOverflow: lyricOverflow.get(elementIndex) ?? 0,
     })
     previousTimedIndex = elementIndex
-    previousTimedElement = element
-    beatTime += durationInQuarterNotes(element) * (tupletScales.get(elementIndex) ?? 1)
+    previousNaturalBeat = naturalBeat
+    measureTime += durationInQuarterNotes(element) * (tupletScales.get(elementIndex) ?? 1)
     nextBoundary = undefined
   })
 
@@ -273,6 +296,171 @@ function analyzeLine(line: ScoreLine): AnalyzedLine {
   }
 
   return { line, measures, inlineLayers }
+}
+
+function remapMarks(marks: Mark[], indexByOriginal: Map<number, number>): Mark[] {
+  return marks.flatMap((mark) => {
+    const start = indexByOriginal.get(mark.start)
+    const end = indexByOriginal.get(mark.end)
+    return start === undefined || end === undefined ? [] : [{ ...mark, start, end }]
+  })
+}
+
+function analysisSuffix(line: ScoreLine, elementIndex: number): ScoreLine {
+  const entries = line.elements.flatMap((item, index) =>
+    index > elementIndex && item.kind !== 'inline-layer' ? [{ item, index }] : [],
+  )
+  const indexByOriginal = new Map(
+    entries.map(({ index }, syntheticIndex) => [index, syntheticIndex]),
+  )
+  return {
+    ...line,
+    voice: 2,
+    elements: entries.map(({ item }) => item),
+    marks: remapMarks(line.marks, indexByOriginal),
+    lyrics: [],
+  }
+}
+
+function measureContainingElement(
+  analysis: AnalyzedLine,
+  elementIndex: number,
+): number | undefined {
+  return analysis.measures.findIndex(
+    ({ barline }, measure) =>
+      elementIndex <= (barline.elementIndex ?? Number.POSITIVE_INFINITY) &&
+      (measure === 0 ||
+        elementIndex >
+          (analysis.measures[measure - 1]?.barline.elementIndex ?? Number.NEGATIVE_INFINITY)),
+  )
+}
+
+function planInlineVoices(analyzed: AnalyzedLine[]): InlineVoicePlan[] {
+  return analyzed.flatMap((analysis, hostLineIndex) =>
+    analysis.inlineLayers.flatMap(({ element, elementIndex }) => {
+      const upperLine: ScoreLine = {
+        ...analysis.line,
+        voice: 1,
+        elements: element.elements,
+        marks: element.marks,
+        lyrics: [],
+      }
+      if (element.role !== 'voice') {
+        return [
+          {
+            hostLineIndex,
+            element,
+            elementIndex,
+            inlineOffset: 0,
+            upperLine,
+            virtualAnalysis: analyzeLine(upperLine),
+            upperEndsWithBarline: false,
+            hasLeftBrace: false,
+            closesWithinLine: false,
+            fullHeightRightBrace: false,
+          },
+        ]
+      }
+      const hostEntries = analysis.line.elements.map((item, index) => ({ item, index }))
+      const prefixEntries = hostEntries.filter(({ index }) => index < elementIndex)
+      const lowerEntries = hostEntries.filter(
+        ({ item, index }) => index > elementIndex && item.kind !== 'inline-layer',
+      )
+      if (lowerEntries.length === 0) return []
+      const upperDuration = timedDuration(element.elements, element.marks)
+      const hostTupletScales = tupletScalesByIndex(analysis.line.elements, analysis.line.marks)
+      let lowerDuration = 0
+      let closingBarOriginal: number | undefined
+      for (const { item, index } of lowerEntries) {
+        if (item.kind === 'note' || item.kind === 'sustain') {
+          lowerDuration += durationInQuarterNotes(item) * (hostTupletScales.get(index) ?? 1)
+        } else if (item.kind === 'barline' && lowerDuration >= upperDuration - 1e-9) {
+          closingBarOriginal = index
+          break
+        }
+      }
+
+      const previousElement = prefixEntries
+        .map(({ item }) => item)
+        .reverse()
+        .find((item) => item.kind !== 'beat-boundary' && item.kind !== 'inline-layer')
+      const hasLeftBrace =
+        previousElement?.kind === 'barline' &&
+        previousElement.type !== 'hidden' &&
+        previousElement.type !== 'invisible'
+      const closesWithinLine =
+        closingBarOriginal !== undefined &&
+        analysis.line.elements.some(
+          (item, index) =>
+            index > closingBarOriginal && (item.kind === 'note' || item.kind === 'sustain'),
+        )
+
+      const upperEndsWithBarline =
+        [...element.elements]
+          .reverse()
+          .find((item) => item.kind !== 'beat-boundary' && item.kind !== 'inline-layer')?.kind ===
+        'barline'
+      const suffixEntries = lowerEntries.filter(
+        ({ index }) =>
+          closingBarOriginal !== undefined &&
+          (upperEndsWithBarline ? index > closingBarOriginal : index >= closingBarOriginal),
+      )
+      const inlineOffset = prefixEntries.length
+      const suffixOffset = inlineOffset + element.elements.length
+      const elements = [
+        ...prefixEntries.map(({ item }) => item),
+        ...element.elements,
+        ...suffixEntries.map(({ item }) => item),
+      ]
+      const prefixIndexByOriginal = new Map(
+        prefixEntries.map(({ index }, virtualIndex) => [index, virtualIndex]),
+      )
+      const suffixIndexByOriginal = new Map(
+        suffixEntries.map(({ index }, suffixIndex) => [index, suffixOffset + suffixIndex]),
+      )
+      const virtualLine: ScoreLine = {
+        ...analysis.line,
+        voice: 1,
+        elements,
+        marks: [
+          ...remapMarks(analysis.line.marks, prefixIndexByOriginal),
+          ...element.marks.map((mark) => ({
+            ...mark,
+            start: mark.start + inlineOffset,
+            end: mark.end + inlineOffset,
+          })),
+          ...remapMarks(analysis.line.marks, suffixIndexByOriginal),
+        ],
+        lyrics: [],
+      }
+      const virtualAnalysis = analyzeLine(virtualLine)
+      const startMeasure = measureContainingElement(analysis, elementIndex)
+      const closingMeasure =
+        closingBarOriginal === undefined
+          ? undefined
+          : analysis.measures.findIndex(
+              ({ barline }) => barline.elementIndex === closingBarOriginal,
+            )
+
+      return [
+        {
+          hostLineIndex,
+          element,
+          elementIndex,
+          inlineOffset,
+          upperLine,
+          virtualAnalysis,
+          ...(startMeasure === undefined || startMeasure < 0 ? {} : { startMeasure }),
+          ...(closingMeasure === undefined || closingMeasure < 0 ? {} : { closingMeasure }),
+          ...(closingBarOriginal === undefined ? {} : { closingBarOriginal }),
+          upperEndsWithBarline,
+          hasLeftBrace,
+          closesWithinLine,
+          fullHeightRightBrace: previousElement?.kind === 'barline',
+        },
+      ]
+    }),
+  )
 }
 
 /**
@@ -287,6 +475,11 @@ export function layoutVoiceGroup(
   voiceColumnWidth = 0,
 ): VoiceGroupLayout {
   const analyzed = group.voices.map(analyzeLine)
+  const inlineVoicePlans = planInlineVoices(analyzed)
+  const voiceAlignmentAnalyses = inlineVoicePlans.flatMap(({ element, virtualAnalysis }) =>
+    element.role === 'voice' ? [virtualAnalysis] : [],
+  )
+  const alignmentAnalyses = [...analyzed, ...voiceAlignmentAnalyses]
   const lineLayouts: LineLayout[] = analyzed.map(({ line }) => ({
     line,
     elements: [],
@@ -294,7 +487,19 @@ export function layoutVoiceGroup(
     inlineLayers: [],
     xByElement: new Map(),
   }))
-  const measureCount = Math.max(0, ...analyzed.map(({ measures }) => measures.length))
+  const virtualLayouts: Array<LineLayout | undefined> = inlineVoicePlans.map(
+    ({ element, virtualAnalysis: { line } }) =>
+      element.role === 'voice'
+        ? {
+            line,
+            elements: [],
+            barlines: [],
+            inlineLayers: [],
+            xByElement: new Map(),
+          }
+        : undefined,
+  )
+  const measureCount = Math.max(0, ...alignmentAnalyses.map(({ measures }) => measures.length))
   const voiceBraceMeasure = analyzed.reduce<number | undefined>((first, { measures }) => {
     const found = measures.findIndex(({ barline }) =>
       barline.element?.ornaments.some(({ name }) => name === 'sbf'),
@@ -305,11 +510,18 @@ export function layoutVoiceGroup(
   let measureStart = startX
   let endX = startX
   let voiceBraceX: number | undefined
+  let voiceColumnEndX: number | undefined
 
   for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
+    const hasInlineLeftColumn = inlineVoicePlans.some(
+      (plan) =>
+        plan.element.role === 'voice' && plan.hasLeftBrace && plan.startMeasure === measureIndex,
+    )
+    if (hasInlineLeftColumn) measureStart += 20
+
     const beatCount = Math.max(
       0,
-      ...analyzed.map(({ measures }) => measures[measureIndex]?.beats.length ?? 0),
+      ...alignmentAnalyses.map(({ measures }) => measures[measureIndex]?.beats.length ?? 0),
     )
     const beatStarts: number[] = []
     const beatColumns: number[][] = []
@@ -317,7 +529,7 @@ export function layoutVoiceGroup(
 
     for (let beatIndex = 0; beatIndex < beatCount; beatIndex += 1) {
       beatStarts.push(nextBeatStart)
-      const voiceItems = analyzed.map(
+      const voiceItems = alignmentAnalyses.map(
         ({ measures }) => measures[measureIndex]?.beats[beatIndex] ?? [],
       )
       const itemCount = Math.max(0, ...voiceItems.map((items) => items.length))
@@ -372,12 +584,18 @@ export function layoutVoiceGroup(
           BARLINE_GAP +
           Math.max(
             0,
-            ...analyzed.flatMap(({ measures }) => {
+            ...alignmentAnalyses.flatMap(({ measures }) => {
               const items = measures[measureIndex]?.beats[lastBeat] ?? []
               return items.length === 0 ? [] : [beatTerminalWidth(items)]
             }),
           )
-    const barX = measureStart + barRelativeX
+    const hasInlineRightColumn = inlineVoicePlans.some(
+      (plan) =>
+        plan.element.role === 'voice' &&
+        plan.closesWithinLine &&
+        plan.closingMeasure === measureIndex,
+    )
+    const barX = measureStart + barRelativeX + (hasInlineRightColumn ? 20 : 0)
 
     analyzed.forEach((analysis, lineIndex) => {
       const output = lineLayouts[lineIndex]
@@ -416,7 +634,45 @@ export function layoutVoiceGroup(
       }
     })
 
-    const closures = analyzed
+    inlineVoicePlans.forEach(({ element, virtualAnalysis }, planIndex) => {
+      if (element.role !== 'voice') return
+      const output = virtualLayouts[planIndex]
+      const measure = virtualAnalysis.measures[measureIndex]
+      if (output === undefined || measure === undefined) return
+      measure.beats.forEach((items, beatIndex) => {
+        const beatStart = beatStarts[beatIndex] ?? 0
+        items.forEach((item, itemIndex) => {
+          const x = measureStart + beatStart + (beatColumns[beatIndex]?.[itemIndex] ?? 0)
+          output.elements.push({
+            element: item.element,
+            elementIndex: item.elementIndex,
+            measure: measureIndex,
+            beat: beatIndex,
+            x,
+          })
+          output.xByElement.set(item.elementIndex, x)
+        })
+      })
+      const barline = measure.barline
+      output.barlines.push({
+        measure: measureIndex,
+        synthetic: barline.synthetic,
+        x: barX,
+        ...(barline.element === undefined ? {} : { element: barline.element }),
+        ...(barline.elementIndex === undefined ? {} : { elementIndex: barline.elementIndex }),
+      })
+      if (barline.element !== undefined && barline.elementIndex !== undefined) {
+        output.elements.push({
+          element: barline.element,
+          elementIndex: barline.elementIndex,
+          measure: measureIndex,
+          x: barX,
+        })
+        output.xByElement.set(barline.elementIndex, barX)
+      }
+    })
+
+    const closures = alignmentAnalyses
       .map(({ measures }) => measures[measureIndex]?.barline.element)
       .filter((barline): barline is BarlineElement => barline !== undefined)
     const zeroWidthHiddenBar =
@@ -426,152 +682,135 @@ export function layoutVoiceGroup(
     if (measureIndex === voiceBraceMeasure) {
       measureStart += voiceColumnWidth
       voiceBraceX = measureStart
+      voiceColumnEndX = measureStart
     }
   }
 
-  analyzed.forEach((analysis, lineIndex) => {
-    const output = lineLayouts[lineIndex]
+  inlineVoicePlans.forEach((plan, planIndex) => {
+    const output = lineLayouts[plan.hostLineIndex]
+    const virtualLayout = virtualLayouts[planIndex]
     if (output === undefined) return
-    analysis.inlineLayers.forEach(({ element, elementIndex }) => {
+    if (plan.element.role === 'accompaniment') {
       const next = output.elements
-        .filter((positioned) => positioned.elementIndex > elementIndex)
+        .filter((positioned) => positioned.elementIndex > plan.elementIndex)
         .sort((left, right) => left.elementIndex - right.elementIndex)[0]
       const x = next?.x ?? output.barlines[output.barlines.length - 1]?.x ?? startX
-      const lowerEntries = analysis.line.elements.flatMap((item, index) =>
-        index > elementIndex && item.kind !== 'inline-layer' ? [{ item, index }] : [],
-      )
-      const lowerIndexBySynthetic = lowerEntries.map(({ index }) => index)
-      const syntheticByOriginal = new Map(
-        lowerIndexBySynthetic.map((originalIndex, syntheticIndex) => [
-          originalIndex,
-          syntheticIndex,
-        ]),
-      )
-      const lowerMarks = analysis.line.marks.flatMap((mark) => {
-        const markStart = syntheticByOriginal.get(mark.start)
-        const markEnd = syntheticByOriginal.get(mark.end)
-        return markStart === undefined || markEnd === undefined
-          ? []
-          : [{ ...mark, start: markStart, end: markEnd }]
-      })
-      const upperLine: ScoreLine = {
-        ...analysis.line,
-        voice: 1,
-        elements: element.elements,
-        marks: element.marks,
-        lyrics: [],
+      const lowerLine = analysisSuffix(output.line, plan.elementIndex)
+      if (lowerLine.elements.length === 0) {
+        output.inlineLayers.push({
+          element: plan.element,
+          elementIndex: plan.elementIndex,
+          x,
+        })
+        return
       }
-      const lowerLine: ScoreLine = {
-        ...analysis.line,
-        voice: 2,
-        elements: lowerEntries.map(({ item }) => item),
-        marks: lowerMarks,
-        lyrics: [],
-      }
-      const branch =
-        lowerEntries.length === 0
-          ? undefined
-          : layoutVoiceGroup({ index: -1, voices: [upperLine, lowerLine] }, x)
-      const upperLayout = branch?.lines[0]
-      const lowerLayout = branch?.lines[1]
-      const upperDuration = timedDuration(
-        element.elements.filter(
-          (item): item is TimedElement | BarlineElement =>
-            item.kind !== 'inline-layer' && item.kind !== 'beat-boundary',
-        ),
-        element.marks,
+      const branch = layoutVoiceGroup({ index: -1, voices: [plan.upperLine, lowerLine] }, x)
+      const lowerLayout = branch.lines[1]
+      const lowerIndices = output.line.elements.flatMap((item, index) =>
+        index > plan.elementIndex && item.kind !== 'inline-layer' ? [index] : [],
       )
-      let lowerDuration = 0
-      let closingBarOriginal: number | undefined
-      for (const { item, index } of lowerEntries) {
-        if (item.kind === 'note' || item.kind === 'sustain') {
-          lowerDuration += durationInQuarterNotes(item)
-        } else if (item.kind === 'barline' && lowerDuration >= upperDuration - 1e-9) {
-          closingBarOriginal = index
-          break
-        }
-      }
-      const closesWithinLine =
-        element.role === 'voice' &&
-        closingBarOriginal !== undefined &&
-        analysis.line.elements.some(
-          (item, index) =>
-            index > closingBarOriginal && (item.kind === 'note' || item.kind === 'sustain'),
-        )
-      const previousElement = analysis.line.elements
-        .slice(0, elementIndex)
-        .reverse()
-        .find((item) => item.kind !== 'beat-boundary' && item.kind !== 'inline-layer')
-      const hasLeftBrace =
-        element.role === 'voice' &&
-        previousElement?.kind === 'barline' &&
-        previousElement.type !== 'hidden' &&
-        previousElement.type !== 'invisible'
-      const leftBraceShift = hasLeftBrace ? 20 : 0
-      const closingBarBeforeShift =
-        closingBarOriginal === undefined
-          ? undefined
-          : lowerLayout?.xByElement.get(syntheticByOriginal.get(closingBarOriginal) ?? -1)
       lowerLayout?.elements.forEach((positioned) => {
-        const originalIndex = lowerIndexBySynthetic[positioned.elementIndex]
+        const originalIndex = lowerIndices[positioned.elementIndex]
         if (originalIndex === undefined) return
-        const branchShift =
-          leftBraceShift +
-          (closesWithinLine &&
-          closingBarOriginal !== undefined &&
-          originalIndex >= closingBarOriginal
-            ? 20
-            : 0)
         const original = output.elements.find((item) => item.elementIndex === originalIndex)
-        if (original !== undefined) original.x = positioned.x + branchShift
-        output.xByElement.set(originalIndex, positioned.x + branchShift)
+        if (original !== undefined) original.x = positioned.x
+        output.xByElement.set(originalIndex, positioned.x)
       })
       lowerLayout?.barlines.forEach((barline) => {
         if (barline.elementIndex === undefined) return
-        const originalIndex = lowerIndexBySynthetic[barline.elementIndex]
+        const originalIndex = lowerIndices[barline.elementIndex]
         if (originalIndex === undefined) return
-        const branchShift =
-          leftBraceShift +
-          (closesWithinLine &&
-          closingBarOriginal !== undefined &&
-          originalIndex >= closingBarOriginal
-            ? 20
-            : 0)
         const original = output.barlines.find((item) => item.elementIndex === originalIndex)
-        if (original !== undefined) original.x = barline.x + branchShift
+        if (original !== undefined) original.x = barline.x
       })
-      if (leftBraceShift > 0) {
-        upperLayout?.elements.forEach((positioned) => {
-          positioned.x += leftBraceShift
-        })
-        upperLayout?.barlines.forEach((barline) => {
-          barline.x += leftBraceShift
-        })
-        upperLayout?.xByElement.forEach((position, index) => {
-          upperLayout.xByElement.set(index, position + leftBraceShift)
-        })
-      }
-      if (branch !== undefined) {
-        endX = Math.max(endX, branch.endX + leftBraceShift + (closesWithinLine ? 20 : 0))
-      }
       output.inlineLayers.push({
-        element,
-        elementIndex,
+        element: plan.element,
+        elementIndex: plan.elementIndex,
         x,
-        ...(upperLayout === undefined ? {} : { layout: upperLayout }),
-        ...(closingBarOriginal === undefined ? {} : { closingElementIndex: closingBarOriginal }),
-        ...(hasLeftBrace ? { braceStartX: x - 15 } : {}),
-        ...(closesWithinLine && closingBarBeforeShift !== undefined
-          ? {
-              braceEndX: closingBarBeforeShift + leftBraceShift,
-              closesWithinLine: true,
-              fullHeightRightBrace: previousElement?.kind === 'barline',
-            }
-          : {}),
+        ...(branch.lines[0] === undefined ? {} : { layout: branch.lines[0] }),
       })
+      endX = Math.max(endX, branch.endX)
+      return
+    }
+    if (virtualLayout === undefined) return
+    const upperElements = virtualLayout.elements.flatMap((positioned) => {
+      const elementIndex = positioned.elementIndex - plan.inlineOffset
+      return elementIndex >= 0 && elementIndex < plan.upperLine.elements.length
+        ? [{ ...positioned, elementIndex }]
+        : []
     })
-    output.elements.sort((left, right) => left.elementIndex - right.elementIndex)
+    const upperBarlines = virtualLayout.barlines.flatMap((barline) => {
+      if (barline.measure < (plan.startMeasure ?? 0)) return []
+      if (plan.closingMeasure !== undefined && barline.measure > plan.closingMeasure) return []
+      const virtualElementIndex = barline.elementIndex
+      const elementIndex =
+        virtualElementIndex === undefined ? undefined : virtualElementIndex - plan.inlineOffset
+      const borrowedClosingBar =
+        !plan.upperEndsWithBarline &&
+        plan.closingMeasure !== undefined &&
+        barline.measure === plan.closingMeasure
+      if (borrowedClosingBar) {
+        return [
+          {
+            measure: barline.measure,
+            synthetic: true,
+            x: barline.x,
+          },
+        ]
+      }
+      if (
+        virtualElementIndex !== undefined &&
+        (virtualElementIndex < plan.inlineOffset ||
+          virtualElementIndex >= plan.inlineOffset + plan.upperLine.elements.length)
+      ) {
+        return []
+      }
+      return [
+        {
+          ...barline,
+          ...(elementIndex === undefined ? {} : { elementIndex }),
+        },
+      ]
+    })
+    const upperLayout: LineLayout = {
+      line: plan.upperLine,
+      elements: upperElements,
+      barlines: upperBarlines,
+      inlineLayers: [],
+      xByElement: new Map(upperElements.map(({ elementIndex, x }) => [elementIndex, x])),
+    }
+    const x =
+      upperElements[0]?.x ??
+      output.elements
+        .filter((positioned) => positioned.elementIndex > plan.elementIndex)
+        .sort((left, right) => left.elementIndex - right.elementIndex)[0]?.x ??
+      output.barlines[output.barlines.length - 1]?.x ??
+      startX
+    const closingBarX =
+      plan.closingMeasure === undefined
+        ? undefined
+        : virtualLayout.barlines.find(({ measure }) => measure === plan.closingMeasure)?.x
+    output.inlineLayers.push({
+      element: plan.element,
+      elementIndex: plan.elementIndex,
+      x,
+      layout: upperLayout,
+      ...(plan.closingBarOriginal === undefined
+        ? {}
+        : { closingElementIndex: plan.closingBarOriginal }),
+      ...(plan.hasLeftBrace ? { braceStartX: x - 35 } : {}),
+      ...(plan.closesWithinLine && closingBarX !== undefined
+        ? {
+            braceEndX: closingBarX - 20,
+            closesWithinLine: true,
+            fullHeightRightBrace: plan.fullHeightRightBrace,
+          }
+        : {}),
+    })
   })
+  lineLayouts.forEach((output) =>
+    output.elements.sort((left, right) => left.elementIndex - right.elementIndex),
+  )
 
   if (voiceBraceMeasure !== undefined) {
     const nextMeasureTimedElements = lineLayouts.flatMap(({ elements }) =>
@@ -594,8 +833,15 @@ export function layoutVoiceGroup(
   if (shouldFitLine && Number.isFinite(maximumX) && endX !== maximumX && endX > startX) {
     // The legacy renderer reserves one reduced-note unit plus the 14 px width
     // of the closing symbol, then pins that final barline to the right edge.
-    const scale = (maximumX - startX + FINAL_SYMBOL_WIDTH) / (endX - startX + UNDERLINED_NOTE_STEP)
-    const compress = (x: number): number => startX + (x - startX) * scale
+    const fixedVoiceColumn = voiceColumnEndX === undefined ? 0 : voiceColumnWidth
+    const scale =
+      (maximumX - startX + FINAL_SYMBOL_WIDTH - fixedVoiceColumn) /
+      (endX - startX + UNDERLINED_NOTE_STEP - fixedVoiceColumn)
+    const compress = (x: number): number => {
+      const precedingFixedVoiceColumn =
+        voiceColumnEndX !== undefined && x >= voiceColumnEndX - 1e-9 ? voiceColumnWidth : 0
+      return startX + (x - startX - precedingFixedVoiceColumn) * scale + precedingFixedVoiceColumn
+    }
     lineLayouts.forEach((layout) => {
       layout.elements.forEach((positioned) => {
         positioned.x = compress(positioned.x)
