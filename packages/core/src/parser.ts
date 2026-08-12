@@ -952,6 +952,7 @@ function parseMetadata(
   }
   if (prefix === 'P') {
     const matches = [...value.matchAll(/\d+\s*\/\s*\d+/g)]
+    metadata.meters = []
     if (matches.length === 0) {
       report(context, 'invalid-meter', `Invalid meter '${value}'.`, 0, value.length, 'error')
     } else {

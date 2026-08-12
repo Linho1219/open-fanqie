@@ -61,6 +61,13 @@ Q: 1 |
     expect(document.diagnostics).toEqual([])
   })
 
+  it('lets an invalid repeated P header clear the previous meter', () => {
+    const document = parse(`P: 4/4\nP: invalid\nQ: 1 |`)
+
+    expect(document.metadata.meters).toEqual([])
+    expect(document.diagnostics.map(({ code }) => code)).toContain('invalid-meter')
+  })
+
   it('preserves normalized barline annotation code', () => {
     const document = parse(`Q: 1 |"p:2 / 4" 2 |"foo bar" 3 |`)
     const barlines = document.pages[0]?.groups[0]?.voices[0]?.elements.filter(
