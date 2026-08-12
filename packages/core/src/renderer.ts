@@ -2,7 +2,7 @@ import { pageSpacing, resolvePageConfig, type ResolvedPageConfig } from './confi
 import {
   ACCIDENTAL_GLYPH_IDS,
   BARLINE_GLYPH_IDS,
-  BARLINE_ORNAMENT_GLYPH_IDS,
+  barlineOrnamentGlyph,
   escapeXml,
   formatNumber,
   GlyphRegistry,
@@ -494,7 +494,7 @@ function renderBarline(
     }),
   ]
   barline?.ornaments.forEach((ornament) => {
-    const id = BARLINE_ORNAMENT_GLYPH_IDS[ornament.name]
+    const id = barlineOrnamentGlyph(ornament.name)
     if (id !== undefined) output.push(registry.use(id, x, y - 26))
   })
   if (barline?.temporaryMeter !== undefined) {
@@ -664,7 +664,12 @@ function renderMark(
     const control = span * 0.3 - 0.4
     const path = `M ${formatNumber(x1)},${formatNumber(top)} C ${formatNumber(x1 + control)},${formatNumber(top - 10)},${formatNumber(x2 - control)},${formatNumber(top - 10)},${formatNumber(x2)},${formatNumber(top)} M ${formatNumber(x2)},${formatNumber(top)} C  ${formatNumber(x2 - control)},${formatNumber(top - 9)},${formatNumber(x1 + control)},${formatNumber(top - 9)},${formatNumber(x1)},${formatNumber(top)}`
     const output = [`<path d="${path}" stroke-width="0.5" stroke="${INK}"></path>`]
-    if (mark.type === 'tuplet' && mark.caption !== undefined && /^[2-9]$/.test(mark.caption)) {
+    if (
+      mark.type === 'tuplet' &&
+      mark.caption !== undefined &&
+      /^\d+$/.test(mark.caption) &&
+      Number(mark.caption) >= 2
+    ) {
       output.push(registry.use(`lianyin_shuzi_${mark.caption}`, (x1 + x2) / 2, top - 7))
     }
     return output

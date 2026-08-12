@@ -39,6 +39,7 @@ describe('render', () => {
       'xlink:href="#shuzi_z_1"',
     )
     expect(render('Q: 1&constructor |')).not.toContain('[object Object]')
+    expect(render('Q: 1 |&constructor')).not.toContain('[object Object]')
   })
 
   it('renders the full compatibility score without diagnostics', () => {
@@ -291,6 +292,13 @@ Q2: 6 - - - | 7 - - - :|| 1' - - - | 2 - - - |
 
     expect(svg.match(/time="0\.67"/g)).toHaveLength(3)
     expect(svg).toContain('xlink:href="#lianyin_shuzi_3"')
+  })
+
+  it('preserves the legacy dangling caption reference for large tuplets', () => {
+    const svg = render(`Q: (y1 - 2 3 4 5 6 7 1 2) |`)
+
+    expect(svg).toContain('xlink:href="#lianyin_shuzi_10"')
+    expect(svg).not.toContain('<g id="lianyin_shuzi_10"')
   })
 
   it('stacks genuinely overlapping slurs while sharing touching endpoints', () => {

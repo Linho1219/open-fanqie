@@ -141,3 +141,7 @@ export function ornamentGlyph(ornament: Ornament): string | undefined {
   }
   return base
 }
+
+export function barlineOrnamentGlyph(name: string): string | undefined {
+  return ownValue(BARLINE_ORNAMENT_GLYPH_IDS, name)
+}
