@@ -205,10 +205,12 @@ Q2: 6 - - - | 7 - - - :|| 1' - - - | 2 - - - |
 `)
     const upper = uses(svg, 1)
     const lower = uses(svg, 2)
+    const upperLead = upper.find(({ code }) => code === '3')
+    const lowerLead = lower.find(({ code }) => code === "1'")
 
-    expect(upper.find(({ code }) => code === '3')?.x).toBe(
-      lower.find(({ code }) => code === "1'")?.x,
-    )
+    expect(upperLead).toBeDefined()
+    expect(lowerLead).toBeDefined()
+    expect(upperLead?.x).toBe(lowerLead?.x)
     expect(lower.filter(({ code }) => code === '|yj')).toHaveLength(1)
   })
 

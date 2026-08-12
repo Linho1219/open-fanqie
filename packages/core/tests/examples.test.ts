@@ -99,6 +99,9 @@ describe('bundled legacy examples', () => {
     const lowerRepeatLeadX = Number(
       svg.match(/<use x="([^"]+)"[^>]+notepos="0_10_11"[^>]+code="3\(\)"/)?.[1],
     )
+    expect([sbfBarX, nextNoteX, voiceBraceX, temporaryVoiceLeadX, lowerRepeatLeadX]).toSatisfy(
+      (values: number[]) => values.every(Number.isFinite),
+    )
     expect(nextNoteX).toBeGreaterThan(sbfBarX)
     expect(voiceBraceX).toBe(nextNoteX)
     expect(lowerRepeatLeadX).toBe(temporaryVoiceLeadX)
