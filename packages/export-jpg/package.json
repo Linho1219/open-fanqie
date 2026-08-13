@@ -1,0 +1,38 @@
+{
+  "name": "@openfanqie/export-jpg",
+  "version": "0.1.0",
+  "description": "Browser-side JPEG export for Open Fanqie SVG pages",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/open-fanqie-export-jpg.cjs",
+  "module": "./dist/open-fanqie-export-jpg.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/open-fanqie-export-jpg.js",
+      "require": "./dist/open-fanqie-export-jpg.cjs"
+    }
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "pnpm run clean && tsc -p tsconfig.build.json && vite build",
+    "clean": "rimraf dist coverage",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "jianpu",
+    "numbered-notation",
+    "svg",
+    "jpeg",
+    "jpg"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  }
+}

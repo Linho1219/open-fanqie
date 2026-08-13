@@ -1,0 +1,42 @@
+{
+  "name": "@openfanqie/export-pdf",
+  "version": "0.1.0",
+  "description": "Browser-side PDF export for Open Fanqie SVG pages",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "main": "./dist/open-fanqie-export-pdf.cjs",
+  "module": "./dist/open-fanqie-export-pdf.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/open-fanqie-export-pdf.js",
+      "require": "./dist/open-fanqie-export-pdf.cjs"
+    }
+  },
+  "scripts": {
+    "build": "pnpm run clean && tsc -p tsconfig.build.json && vite build",
+    "clean": "rimraf dist coverage",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "jianpu",
+    "numbered-notation",
+    "pdf",
+    "svg",
+    "browser"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@openfanqie/export-jpg": "workspace:*",
+    "pdf-lib": "^1.17.1"
+  }
+}
