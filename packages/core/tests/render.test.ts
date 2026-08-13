@@ -21,6 +21,56 @@ function elementCount(svg: string, name: 'use' | 'text' | 'line' | 'path'): numb
   return body.match(new RegExp(`<${name}\\b`, 'g'))?.length ?? 0
 }
 
+interface GraceUse {
+  x: number
+  y: number
+  href: string
+}
+
+interface GraceLine {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
+function graceDefinition(svg: string, id: string): string {
+  const body = svg.match(new RegExp(`<g id="${id}">([\\s\\S]*?)<\\/g>`))?.[1]
+  if (body === undefined) throw new Error(`Missing grace-note definition '${id}'.`)
+  return body
+}
+
+function graceUses(body: string): GraceUse[] {
+  return [...body.matchAll(/<use x="([^"]+)" y="([^"]+)" xlink:href="#([^"]+)"/g)].map((match) => ({
+    x: Number(match[1]),
+    y: Number(match[2]),
+    href: match[3] ?? '',
+  }))
+}
+
+function graceLines(body: string): GraceLine[] {
+  return [...body.matchAll(/<line x1="([^"]+)" y1="([^"]+)" x2="([^"]+)" y2="([^"]+)"/g)]
+    .map((match) => ({
+      x1: Number(match[1]),
+      y1: Number(match[2]),
+      x2: Number(match[3]),
+      y2: Number(match[4]),
+    }))
+    .sort((left, right) => left.y1 - right.y1 || left.x1 - right.x1)
+}
+
+function graceReferences(svg: string): Array<GraceUse & { id: string }> {
+  const body = svg.replace(/<defs>[\s\S]*?<\/defs>/, '')
+  return [...body.matchAll(/<use x="([^"]+)" y="([^"]+)" xlink:href="#((?:qy|hy)[^"]+)"/g)].map(
+    (match) => ({
+      x: Number(match[1]),
+      y: Number(match[2]),
+      href: match[3] ?? '',
+      id: match[3] ?? '',
+    }),
+  )
+}
+
 describe('render', () => {
   it('matches legacy empty input and nonstandard page selection', () => {
     expect(render('')).toBe('')
@@ -195,6 +245,122 @@ Q: 1// 2// 3// 4// |
     expect(pages[0]).toContain('<g id="qy1_0"')
     expect(pages[0]).toContain('<g id="hy2_0"')
     expect(pages[1]).toContain('<g id="qy0_1"')
+  })
+
+  it('uses grace-sized pitch modifiers and lifts the curve above double beams', () => {
+    const svg = render(`Q1: 1[2'/3,/] 1[3#,] 1[h2$']`)
+    const beforeDouble = graceDefinition(svg, 'qy0_0')
+    const beforeAccidental = graceDefinition(svg, 'qy1_0')
+    const afterAccidental = graceDefinition(svg, 'hy2_0')
+
+    expect(graceLines(beforeDouble)).toEqual([
+      { x1: -3.5, y1: -10.5, x2: 10.5, y2: -10.5 },
+      { x1: -3.5, y1: -8.5, x2: 10.5, y2: -8.5 },
+    ])
+    expect(graceUses(beforeDouble)).toEqual(
+      expect.arrayContaining([
+        { x: 0, y: -17, href: 'yiyin_shuzi_2' },
+        { x: 0, y: -18, href: 'yiyin_yingao_gao' },
+        { x: 7, y: -17, href: 'yiyin_shuzi_3' },
+        { x: 7, y: -10, href: 'yiyin_yingao_di' },
+        { x: 3, y: -11, href: 'yiyinxian_qian' },
+      ]),
+    )
+    expect(graceUses(beforeDouble)).toHaveLength(5)
+
+    expect(graceLines(beforeAccidental)).toEqual([{ x1: 1.5, y1: -10.5, x2: 8.5, y2: -10.5 }])
+    expect(graceUses(beforeAccidental)).toEqual(
+      expect.arrayContaining([
+        { x: 5, y: -17, href: 'yiyin_shuzi_3' },
+        { x: 5, y: -19, href: 'yiyin_bianyinfu_sheng' },
+        { x: 5, y: -12, href: 'yiyin_yingao_di' },
+        { x: 4.5, y: -13, href: 'yiyinxian_qian' },
+      ]),
+    )
+    expect(graceUses(beforeAccidental)).toHaveLength(4)
+
+    expect(graceLines(afterAccidental)).toEqual([{ x1: 1.5, y1: -10.5, x2: 8.5, y2: -10.5 }])
+    expect(graceUses(afterAccidental)).toEqual(
+      expect.arrayContaining([
+        { x: 5, y: -17, href: 'yiyin_shuzi_2' },
+        { x: 5, y: -19, href: 'yiyin_bianyinfu_jiang' },
+        { x: 5, y: -18, href: 'yiyin_yingao_gao' },
+        { x: 4.5, y: -17, href: 'yiyinxian_hou' },
+      ]),
+    )
+    expect(graceUses(afterAccidental)).toHaveLength(4)
+
+    expect(uses(svg, 1)).toEqual([
+      { x: 97, code: '1' },
+      { x: 146.5, code: '1' },
+      { x: 184, code: '1' },
+      { x: 231, code: '|w' },
+    ])
+    expect(graceReferences(svg)).toEqual([
+      { x: 78, y: 130, href: 'qy0_0', id: 'qy0_0' },
+      { x: 129.5, y: 130, href: 'qy1_0', id: 'qy1_0' },
+      { x: 199, y: 130, href: 'hy2_0', id: 'hy2_0' },
+    ])
+  })
+
+  it('segments mixed grace durations, caps beams at three, and renders a natural sign', () => {
+    const svg = render(`Q: 1[2= 3/ 4// 5///] |`)
+    const grace = graceDefinition(svg, 'qy0_0')
+
+    expect(graceLines(grace)).toEqual([
+      { x1: 1.5, y1: -10.5, x2: 29.5, y2: -10.5 },
+      { x1: 8.5, y1: -8.5, x2: 29.5, y2: -8.5 },
+      { x1: 15.5, y1: -6.5, x2: 29.5, y2: -6.5 },
+    ])
+    expect(graceUses(grace)).toEqual(
+      expect.arrayContaining([
+        { x: 5, y: -17, href: 'yiyin_shuzi_2' },
+        { x: 5, y: -19, href: 'yiyin_bianyinfu_huanyuan' },
+        { x: 12, y: -17, href: 'yiyin_shuzi_3' },
+        { x: 19, y: -17, href: 'yiyin_shuzi_4' },
+        { x: 26, y: -17, href: 'yiyin_shuzi_5' },
+      ]),
+    )
+    expect(graceLines(grace)).toHaveLength(3)
+  })
+
+  it('moves a grace curve below the deepest beam and lower octave in the group', () => {
+    const svg = render(`Q: 1[2, 3//] |`)
+    const grace = graceDefinition(svg, 'qy0_0')
+
+    expect(graceUses(grace)).toEqual(
+      expect.arrayContaining([
+        { x: 0, y: -12, href: 'yiyin_yingao_di' },
+        { x: 3, y: -9, href: 'yiyinxian_qian' },
+      ]),
+    )
+  })
+
+  it('splits non-contiguous higher grace beams into separate runs', () => {
+    const svg = render(`Q: 1[2// 3 4//] |`)
+
+    expect(graceLines(graceDefinition(svg, 'qy0_0'))).toEqual([
+      { x1: -3.5, y1: -10.5, x2: 17.5, y2: -10.5 },
+      { x1: -3.5, y1: -8.5, x2: 3.5, y2: -8.5 },
+      { x1: 10.5, y1: -8.5, x2: 17.5, y2: -8.5 },
+      { x1: -3.5, y1: -6.5, x2: 3.5, y2: -6.5 },
+      { x1: 10.5, y1: -6.5, x2: 17.5, y2: -6.5 },
+    ])
+  })
+
+  it('aligns other voices around an after-grace reservation', () => {
+    const svg = render(`Q1: 1[h2] 2 |\nQ2: 3 4 |`)
+
+    expect(uses(svg, 1)).toEqual([
+      { x: 103, code: '1' },
+      { x: 147.5, code: '2' },
+      { x: 182.5, code: '|' },
+    ])
+    expect(uses(svg, 2)).toEqual([
+      { x: 103, code: '3' },
+      { x: 147.5, code: '4' },
+      { x: 182.5, code: '|' },
+    ])
   })
 
   it('aligns voices at beat starts without distributing notes within a beat', () => {

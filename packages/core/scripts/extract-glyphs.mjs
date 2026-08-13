@@ -13,6 +13,7 @@ J: 80
 Q: 0 1 2 3 4 5 6 7 8 9 - |
 Q: 1# 2$ 3= 4' 5'' 6, 7,, 1. 2.. |
 Q: 1[0/1/2/3/4/5/6/7/] 1[h0/1/2/3/4/5/6/7/] |
+Q: 1[2' 3, 4# 5$] |
 Q: 1&zkh 1&ykh 1&yc 1&ycy 1&bc 1&zy 1&dy 1&hx 1&shy 1&xhy 1&sby 1&sby+ 1&xby 1&xby+ 1&cy 1&cy+ 1&tr |
 Q: 1&ppp 1&pp 1&p 1&mp 1&mf 1&f 1&ff 1&fff 1&cresc 1&dim 1&sf 1&fp 1&sfp 1&atempo 1&rit |
 Q: 1 |&fine 2 |&dc 3 |&ds 4 |&ty 5 |&hs 6 || 7 ||/ 1 |: 2 :| 3 :|:
@@ -75,6 +76,18 @@ if (!glyphs.has('dakuohu_you_') && glyphs.has('dakuohu_you_2')) {
   glyphs.set(
     'dakuohu_you_',
     glyphs.get('dakuohu_you_2').replace('id="dakuohu_you_2"', 'id="dakuohu_you_"'),
+  )
+}
+
+// The legacy renderer has no natural-sign grace glyph and emits a broken empty
+// reference for it. Keep the grace modifiers consistently sized by deriving one
+// from the normal natural sign around the same (50, 50) glyph origin.
+if (!glyphs.has('yiyin_bianyinfu_huanyuan') && glyphs.has('bianyinfu_huanyuan')) {
+  const path = glyphs.get('bianyinfu_huanyuan').match(/<path\b[^>]*\/>/)?.[0]
+  if (path === undefined) throw new Error('Failed to derive the grace-note natural glyph')
+  glyphs.set(
+    'yiyin_bianyinfu_huanyuan',
+    `<g id="yiyin_bianyinfu_huanyuan" transform="translate(-50,-50)"><g transform="translate(20,20) scale(0.6)">${path}</g></g>`,
   )
 }
 

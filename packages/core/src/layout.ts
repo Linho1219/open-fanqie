@@ -6,6 +6,7 @@ import type {
   ScoreLine,
   VoiceGroup,
 } from './types'
+import { graceWidth } from './grace'
 import { durationInQuarterNotes, type TimedElement, tupletScale } from './timing'
 
 export const PLAIN_NOTE_STEP = 37.5
@@ -169,13 +170,15 @@ function withinBeatTrailingWidth(element: TimedElement): number {
   if (element.kind !== 'note') return 0
   return (
     element.dots * (PLAIN_NOTE_STEP - UNDERLINED_NOTE_STEP) +
-    (element.ornaments.some(({ name }) => name === 'xhy' || name === 'shy') ? 7.5 : 0)
+    (element.ornaments.some(({ name }) => name === 'xhy' || name === 'shy') ? 7.5 : 0) +
+    graceWidth(element.graceAfter)
   )
 }
 
 function leadingWidth(element: TimedElement, atBeatStart = false, previous?: TimedElement): number {
   if (element.kind !== 'note') return 0
   return (
+    graceWidth(element.graceBefore) +
     (element.accidental === undefined ? 0 : 5) +
     (!atBeatStart && element.duration === 8 && previous?.kind === 'note' && previous.duration === 8
       ? element.dots * (PLAIN_NOTE_STEP - UNDERLINED_NOTE_STEP)

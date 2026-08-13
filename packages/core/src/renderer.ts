@@ -5,9 +5,11 @@ import {
   barlineOrnamentGlyph,
   escapeXml,
   formatNumber,
+  graceAccidentalGlyph,
   GlyphRegistry,
   ornamentGlyph,
 } from './glyphs'
+import { graceMetrics } from './grace'
 import { layoutVoiceGroup, type LineLayout, type PositionedElement } from './layout'
 import { parse } from './parser'
 import { legacyPlaybackTime } from './timing'
@@ -247,43 +249,60 @@ function renderGrace(
   registry: GlyphRegistry,
 ): string[] {
   if (notes.length === 0) return []
-  const step = 9
+  const metrics = graceMetrics(notes)
+  const noteLevels = notes.map((note) =>
+    Math.min(3, Math.max(1, Math.ceil(Math.log2(note.duration / 4)))),
+  )
+  const maxLevels = Math.max(...noteLevels)
   const body: string[] = []
-  notes.forEach((note, index) => {
-    const localX = index * step
-    const glyph = note.pitch === 9 ? 'shuzi_x' : `yiyin_shuzi_${note.pitch}`
-    registry.register(glyph)
-    body.push(
-      `<use x="${formatNumber(localX)}" y="-17" xlink:href="#${glyph}" xmlns:xlink="http://www.w3.org/1999/xlink"></use>`,
-    )
-    if (note.accidental !== undefined) {
-      const accidental = ACCIDENTAL_GLYPH_IDS[note.accidental]
-      registry.register(accidental)
+
+  for (let level = 0; level < maxLevels; level += 1) {
+    let runStart: number | undefined
+    notes.forEach((_, index) => {
+      const participates = (noteLevels[index] ?? 0) > level
+      if (participates && runStart === undefined) runStart = index
+      const runEnds = runStart !== undefined && (!participates || index === notes.length - 1)
+      if (!runEnds || runStart === undefined) return
+      const runEnd = participates ? index : index - 1
+      const x1 = (metrics.positions[runStart] ?? 0) - 3.5
+      const x2 = (metrics.positions[runEnd] ?? 0) + 3.5
+      const lineY = -10.5 + level * 2
       body.push(
-        `<use x="${formatNumber(localX - 5)}" y="-17" xlink:href="#${accidental}" xmlns:xlink="http://www.w3.org/1999/xlink"></use>`,
+        `<line x1="${formatNumber(x1)}" y1="${formatNumber(lineY)}" x2="${formatNumber(x2)}" y2="${formatNumber(lineY)}" stroke-width="1" stroke="${INK}"></line>`,
       )
+      runStart = undefined
+    })
+  }
+
+  notes.forEach((note, index) => {
+    const localX = metrics.positions[index] ?? 0
+    const glyph = note.pitch === 9 ? 'shuzi_x' : `yiyin_shuzi_${note.pitch}`
+    body.push(registry.use(glyph, localX, -17))
+    if (note.accidental !== undefined) {
+      body.push(registry.use(graceAccidentalGlyph(note.accidental), localX, -19))
     }
-    const octaveGlyph = note.octave >= 0 ? 'yingao_gao' : 'yingao_di'
+    const octaveGlyph = note.octave >= 0 ? 'yiyin_yingao_gao' : 'yiyin_yingao_di'
     for (let octave = 0; octave < Math.abs(note.octave); octave += 1) {
-      registry.register(octaveGlyph)
       body.push(
-        `<use x="${formatNumber(localX)}" y="${formatNumber(note.octave > 0 ? -27 - octave * 4 : -7 + octave * 4)}" xlink:href="#${octaveGlyph}" xmlns:xlink="http://www.w3.org/1999/xlink"></use>`,
+        registry.use(
+          octaveGlyph,
+          localX,
+          note.octave > 0
+            ? -18 - octave * 4
+            : -12 + ((noteLevels[index] ?? 1) - 1) * 2 + octave * 3,
+        ),
       )
     }
   })
-  const levels = Math.max(1, ...notes.map((note) => Math.max(1, Math.log2(note.duration / 4))))
-  for (let level = 0; level < levels; level += 1) {
-    body.unshift(
-      `<line x1="-3.5" y1="${formatNumber(-10.5 + level * 3)}" x2="${formatNumber((notes.length - 1) * step + 3.5)}" y2="${formatNumber(-10.5 + level * 3)}" stroke-width="1" stroke="${INK}"></line>`,
-    )
-  }
   const tail = before ? 'yiyinxian_qian' : 'yiyinxian_hou'
-  registry.register(tail)
-  body.push(
-    `<use x="${formatNumber(before ? (notes.length - 1) * step - 0.5 : -0.5)}" y="-17" xlink:href="#${tail}" xmlns:xlink="http://www.w3.org/1999/xlink"></use>`,
-  )
+  const firstX = metrics.positions[0] ?? 0
+  const lastX = metrics.positions.at(-1) ?? firstX
+  const tailX = (firstX + lastX) / 2 - 0.5
+  const lowerOctaves = Math.max(0, ...notes.map((note) => -note.octave))
+  const tailY = -17 + (maxLevels - 1) * 2 + lowerOctaves * 4
+  body.push(registry.use(tail, tailX, tailY))
   registry.define(id, body.join(''))
-  return [registry.useDefined(id, before ? x - 12 - (notes.length - 1) * step : x + 15, y)]
+  return [registry.useDefined(id, before ? x - metrics.width - 5 : x + 15, y)]
 }
 
 interface OrnamentContext {

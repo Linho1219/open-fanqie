@@ -64,6 +64,10 @@ export const ACCIDENTAL_GLYPH_IDS: Readonly<Record<Accidental, string>> = {
   natural: 'bianyinfu_huanyuan',
 }
 
+export function graceAccidentalGlyph(accidental: Accidental): string {
+  return `yiyin_${ACCIDENTAL_GLYPH_IDS[accidental]}`
+}
+
 export function escapeXml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
