@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@openfanqie/core": "workspace:*"
+    "@openfanqie/core": "workspace:*",
+    "@openfanqie/export-jpg": "workspace:*",
+    "@openfanqie/export-pdf": "workspace:*"
   },
   "engines": {
     "node": ">=20"

@@ -1,0 +1,17 @@
+<div style="margin: 10px; width: 320px">
+  <div style="margin-bottom: 10px">
+    <p>
+      <strong>说明：</strong>JPG 将完全在浏览器中生成。曲谱页数较多或选择 300 DPI
+      时可能需要一些时间。
+    </p>
+  </div>
+  <div style="text-align: center; margin-bottom: 15px">
+    <div style="margin-bottom: 10px">
+      图片分辨率：<select id="jpgExportDpi">
+        <option value="96">默认（适合发布到网络分享）</option>
+        <option value="300">DPI 300（适合印刷出版）</option>
+      </select>
+    </div>
+    <input type="button" onClick="exportJpg(this)" value="我知道了，导出JPG图片" />
+  </div>
+</div>

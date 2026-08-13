@@ -8,7 +8,12 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "paths": {
+      "@openfanqie/core": ["../core/src/index.ts"],
+      "@openfanqie/export-jpg": ["../export-jpg/src/index.ts"],
+      "@openfanqie/export-pdf": ["../export-pdf/src/index.ts"]
+    }
   },
   "include": ["src", "vite.config.ts"]
 }

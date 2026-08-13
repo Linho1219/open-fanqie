@@ -51,6 +51,12 @@ importers:
       '@openfanqie/core':
         specifier: workspace:*
         version: link:../core
+      '@openfanqie/export-jpg':
+        specifier: workspace:*
+        version: link:../export-jpg
+      '@openfanqie/export-pdf':
+        specifier: workspace:*
+        version: link:../export-pdf
 
 packages:
 

@@ -299,17 +299,219 @@ function createPng() {
   pForm.submit()
   winClose()
 }
+function getExportName() {
+  var name = $('#filename')
+    .text()
+    .replace(/\.jps$/i, '')
+    .trim()
+  name = name.replace(/[&<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/g, '')
+  return name || '未命名'
+}
+function getExportSource() {
+  var editorFrame = window.frames['editFrame']
+  var editor = editorFrame && editorFrame.document.getElementById('editor_text')
+  if (!editor) {
+    throw new Error('曲谱编辑器尚未准备好，请稍后重试。')
+  }
+  return {
+    code: editor.value,
+    customCode: $('textarea[name=customCode]')
+      .text()
+      .replace(/<rect\b(?=[^>]*\bmask(?:=(?:"true"|'true'|true))?)[^>]*>(?:\s*<\/rect>)?/gi, ''),
+    pageConfig: $('textarea[name=pageConfig]').text(),
+  }
+}
+function getExportPages() {
+  return Promise.resolve()
+    .then(getExportSource)
+    .then(function (source) {
+      return window.openFanqieExporterReady.then(function (exporter) {
+        var pages = exporter.renderPages(source.code, {
+          customCode: source.customCode,
+          pageConfig: source.pageConfig,
+        })
+        if (pages.length == 0) {
+          throw new Error('当前曲谱没有可导出的页面。')
+        }
+        return { exporter: exporter, pages: pages }
+      })
+    })
+}
+function pageExportName(extension, pageIndex, pageCount) {
+  var suffix = pageCount > 1 ? '-' + (pageIndex + 1) : ''
+  return getExportName() + suffix + '.' + extension
+}
+function downloadBlob(blob, filename) {
+  var url = URL.createObjectURL(blob)
+  var link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.style.display = 'none'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(function () {
+    URL.revokeObjectURL(url)
+  }, 1000)
+}
+var exportObjectUrls = []
+function clearExportObjectUrls() {
+  exportObjectUrls.forEach(function (url) {
+    URL.revokeObjectURL(url)
+  })
+  exportObjectUrls = []
+}
+function showJpgResults(blobs) {
+  clearExportObjectUrls()
+  var html =
+    '<div style="text-align:center; width:750px; max-height:500px; overflow:auto;"><div style="padding:10px 10px 20px;"><h3>导出的JPG图片</h3><p>点击图片即可将相应页保存到您的电脑中。</p></div>'
+  blobs.forEach(function (blob, index) {
+    var url = URL.createObjectURL(blob)
+    exportObjectUrls.push(url)
+    html +=
+      '<a href="' +
+      url +
+      '" download="' +
+      pageExportName('jpg', index, blobs.length) +
+      '" style="display:block; border:0;"><img src="' +
+      url +
+      '" style="width:600px; max-width:90%; margin-bottom:10px; border:1px #ccc solid;"></a>'
+  })
+  html += '</div>'
+  $('.win .titleBar span').html('导出JPG图片')
+  $('.win .body').html(html)
+  autoWinSize()
+}
+function exportFailed(title, error) {
+  var message = error && error.message ? error.message : String(error)
+  alert(title + '失败：' + message)
+  winClose()
+}
+function waitForExportPaint(value) {
+  return new Promise(function (resolve) {
+    var schedule =
+      window.requestAnimationFrame ||
+      function (callback) {
+        setTimeout(callback, 0)
+      }
+    schedule(function () {
+      schedule(function () {
+        resolve(value)
+      })
+    })
+  })
+}
+var exportWindowSession = 0
+var svgExportPages = []
+var svgExportSession = 0
+function beginExportWindowSession() {
+  exportWindowSession++
+  svgExportPages = []
+  svgExportSession = 0
+  return exportWindowSession
+}
+function isCurrentExportWindowSession(session) {
+  return session == exportWindowSession
+}
 function toSvg() {
-  showWin('导出SVG格式图片', 'zhipu-toSvg-num-' + $('.page').length)
+  hideMenu()
+  var session = beginExportWindowSession()
+  waitForExportPaint()
+    .then(getExportPages)
+    .then(function (result) {
+      if (!isCurrentExportWindowSession(session)) return
+      svgExportPages = result.pages
+      svgExportSession = session
+      var html =
+        '<div style="margin:10px; width:300px;"><div style="margin-bottom:10px;">点击下方按钮，即可将相应页的SVG格式文件保存到您的电脑中。</div>'
+      for (var index = 0; index < result.pages.length; index++) {
+        html +=
+          '<input type="button" onClick="downSvg(' +
+          index +
+          ')" value="导出第' +
+          (index + 1) +
+          '页" style="margin-right:10px; margin-bottom:5px;">'
+      }
+      html +=
+        '<div style="margin-top:10px;"><strong>SVG格式说明：</strong>SVG是可以无限放大的矢量图格式，因此在印刷方面可以获得非常高的精度。此格式可以导入到多种印刷排版软件中。</div></div>'
+      $('.win .titleBar span').html('导出SVG格式图片')
+      $('.win .body').html(html)
+      autoWinSize()
+      $('.mask').fadeIn(300)
+      $('.win').fadeIn(300)
+    })
+    .catch(function (error) {
+      if (!isCurrentExportWindowSession(session)) return
+      exportFailed('导出SVG', error)
+    })
 }
 function downSvg(num) {
-  var svgHtml = $('.page').eq(num).html()
-  var pForm = $('#postForm')[0]
-  pForm.action = '/zhipu-toSvg'
-  pForm.method = 'POST'
-  pForm.target = 'postwin'
-  $('#postContent').val(svgHtml)
-  pForm.submit()
+  try {
+    if (!isCurrentExportWindowSession(svgExportSession)) {
+      throw new Error('当前导出窗口已经失效，请重新打开。')
+    }
+    var svg = svgExportPages[num]
+    if (!svg) throw new Error('找不到第' + (num + 1) + '页。')
+    downloadBlob(
+      new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n', svg], {
+        type: 'image/svg+xml;charset=utf-8',
+      }),
+      pageExportName('svg', num, svgExportPages.length),
+    )
+  } catch (error) {
+    exportFailed('导出SVG', error)
+  }
+}
+function exportPdf(button) {
+  var session = exportWindowSession
+  button.disabled = true
+  button.value = 'PDF生成中，请稍等...'
+  waitForExportPaint()
+    .then(getExportPages)
+    .then(function (result) {
+      if (!isCurrentExportWindowSession(session)) return null
+      return result.exporter.exportPdf(result.pages)
+    })
+    .then(function (blob) {
+      if (!blob || !isCurrentExportWindowSession(session)) return
+      downloadBlob(blob, getExportName() + '.pdf')
+      winClose()
+    })
+    .catch(function (error) {
+      if (!isCurrentExportWindowSession(session)) return
+      button.disabled = false
+      button.value = '我知道了，导出PDF文档'
+      exportFailed('导出PDF', error)
+    })
+}
+function exportJpg(button) {
+  var session = exportWindowSession
+  var dpi = Number($('#jpgExportDpi').val()) || 96
+  button.disabled = true
+  button.value = 'JPG导出中，请稍等...'
+  waitForExportPaint()
+    .then(getExportPages)
+    .then(function (result) {
+      if (!isCurrentExportWindowSession(session)) return null
+      return result.exporter
+        .exportJpegs(result.pages, {
+          scale: dpi / 96,
+          dpi: dpi,
+        })
+        .then(function (blobs) {
+          return blobs
+        })
+    })
+    .then(function (blobs) {
+      if (!blobs || !isCurrentExportWindowSession(session)) return
+      showJpgResults(blobs)
+    })
+    .catch(function (error) {
+      if (!isCurrentExportWindowSession(session)) return
+      button.disabled = false
+      button.value = '我知道了，导出JPG图片'
+      exportFailed('导出JPG', error)
+    })
 }
 function updateUserInfo() {
   $.post('/Zhipu-userInfo', null, function (re) {
@@ -596,6 +798,7 @@ function show_drag() {
   })
 }
 function showWin(title, url, width, height) {
+  var session = beginExportWindowSession()
   if ($('#playBut').length > 0) {
     stopPlay()
   }
@@ -606,6 +809,7 @@ function showWin(title, url, width, height) {
   $('.mask').fadeIn(300)
   $('.win').fadeIn(300)
   $.get(url, null, function (data) {
+    if (!isCurrentExportWindowSession(session)) return
     if (width) {
       data =
         '<div style="width:' +
@@ -626,11 +830,13 @@ function autoWinSize() {
   $('.win').css({ left: left, top: Top })
 }
 function winClose() {
+  beginExportWindowSession()
   if ($('#playBut').length > 0) {
     stopPlay()
   }
   $('.win').fadeOut(300)
   $('.mask').fadeOut(300)
+  clearExportObjectUrls()
 }
 function winTip(title, str) {
   $('.win .body').html('<div class="winLoad">' + str + '')

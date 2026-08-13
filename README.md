@@ -19,7 +19,7 @@
 - [x] 语法解析器核心
 - [x] SVG 渲染器核心
 - [x] 实现全流程谱面渲染
-- [ ] 导出 PDF
+- [x] 在浏览器中导出 SVG、JPG 和 PDF
 - [x] 拼回原版前端
 - [x] 基于原版前端上线网站
 - [ ] 基于原版前端打包客户端
@@ -47,6 +47,8 @@
 使用 pnpm workspace 管理，各包位于 `packages` 目录：
 
 - `@openfanqie/core`：解析 DSL 并输出 SVG。
+- `@openfanqie/export-jpg`：在浏览器中将 SVG 谱面转换为 JPG，支持 96/300 DPI。
+- `@openfanqie/export-pdf`：在浏览器中将多页 SVG 谱面导出为 PDF。
 - `@openfanqie/legacy-app`：直接 vendor 的原版前端，略作修改以接入重写版渲染核心。
 
 ## License
