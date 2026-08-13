@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>番茄简谱V1.0 beta1</title>
+    <title>番茄简谱 OpenFanqie</title>
     <link href="/Public/zhipuStyle/default/main.css" rel="stylesheet" type="text/css" />
     <script>
       //if(!window.applicationCache) {
@@ -135,7 +135,7 @@
               <li id="menuNewFile" onClick="showWin('新建','./Zhipu-newFile.html');">
                 <i>Ctrl+N</i>新建...
               </li>
-              <li
+              <!-- <li
                 id="menuOpenFile"
                 onClick="showWin('打开','./Zhipu-fileBrowsing-type-open.html');"
               >
@@ -147,7 +147,7 @@
                 onClick="showWin('另存为','./Zhipu-fileBrowsing-type-save.html');"
               >
                 <i>Shift+Ctrl+S</i>另存为...
-              </li>
+              </li> -->
               <li class="line"></li>
               <li onClick="showWin('系统示例文档','./Zhipu-exampleList.html');">
                 从示例谱库中打开...
@@ -207,8 +207,8 @@
           <li>
             <span id="menuHelp" onClick="showMenu(this)">帮助(H)</span>
             <ul>
-              <li onClick="window.open('http://doc.lezhi99.com/fanqie');hideMenu();">软件帮助</li>
-              <li onClick="window.open('http://doc.lezhi99.com/zhipu');hideMenu();">
+              <li onClick="window.open('https://fqdoc.linho.cc/fanqie');hideMenu();">软件帮助</li>
+              <li onClick="window.open('https://fqdoc.linho.cc/zhipu');hideMenu();">
                 脚本说明手册
               </li>
 
@@ -224,20 +224,20 @@
           <li>
             <span
               style="color: #fff000; font-weight: bold"
-              onClick="window.open('/Public/donate/');"
-              >捐赠(D)</span
+              onClick="window.open('https://github.com/Linho1219/open-fanqie');"
+              >GitHub</span
             >
           </li>
         </ul>
         <div class="userInfo">
-          当前用户：未登陆
+          <!-- 当前用户：未登陆
           <span class="but" onClick="showWin('用户登陆','/Zhipu-login');" style="color: #fff000"
             >立刻登录</span
           >
           <input type="hidden" value="0" id="uid" />
           <script>
             $('.userMenu').hide()
-          </script>
+          </script> -->
         </div>
       </div>
     </div>
