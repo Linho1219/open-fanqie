@@ -4,6 +4,7 @@
 
 ```ts
 render(dsl, options): string
+renderSvgPages(dsl, options): string[]
 ```
 
 项目只负责解析、排版和 SVG 输出，不包含旧站页面代理或编辑器界面。
@@ -17,6 +18,9 @@ render(dsl, options): string
 - 原站 `/Zhipu-draw` 的实际表单与 SVG 响应。
 
 旧接口接收 `code`、`customCode`、`pageConfig`、`pageNum` 四个表单字段，分页 SVG 以 `[fenye]` 分隔。核心库用 `RenderOptions` 表达同一组输入。
+
+`renderSvgPages` 直接返回每一页的完整 SVG，适合浏览器下载或交给其他导出包；
+`render` 保留原接口的 `[fenye]` 与 `noRedraw` 兼容协议。
 
 ## Development
 

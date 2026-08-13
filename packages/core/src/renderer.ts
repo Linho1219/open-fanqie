@@ -25,6 +25,7 @@ import type {
   ScoreLine,
   ScorePage,
   SustainElement,
+  SvgRenderOptions,
 } from './types'
 
 const FONT_SIZE_FIX = 0.8355
@@ -1212,19 +1213,36 @@ function splitCustomCode(customCode: string | null | undefined): string[] {
   return customCode.replaceAll('&hh&', '\n').split('[fenye]')
 }
 
-/** Render a Fanqie score using the legacy API's SVG-page response format. */
-export function render(dsl: string, options: RenderOptions = {}): string {
-  if (dsl === '') return ''
+function renderPages(dsl: string, options: SvgRenderOptions): string[] {
+  if (dsl === '') return []
   const document = parse(dsl)
   const diagnostics: Diagnostic[] = [...document.diagnostics]
   const config = resolvePageConfig(options.pageConfig, diagnostics)
   const customPages = splitCustomCode(options.customCode)
   options.onDiagnostics?.(diagnostics)
-  const requestedPage = options.pageNum ?? -1
-  const pages = document.pages.map((page) =>
-    requestedPage !== -1 && requestedPage !== page.index
-      ? 'noRedraw'
-      : renderPage(page, document.metadata, config, customPages[page.index] ?? ''),
+  return document.pages.map((page) =>
+    renderPage(page, document.metadata, config, customPages[page.index] ?? ''),
   )
-  return `${pages.join('[fenye]')}[fenye]`
+}
+
+/** Render a Fanqie score as standalone SVG pages. */
+export function renderSvgPages(dsl: string, options: SvgRenderOptions = {}): string[] {
+  return renderPages(dsl, options).map((page) =>
+    page.replace(
+      ' xmlns="http://www.w3.org/2000/svg"',
+      ' xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"',
+    ),
+  )
+}
+
+/** Render a Fanqie score using the legacy API's SVG-page response format. */
+export function render(dsl: string, options: RenderOptions = {}): string {
+  const pages = renderPages(dsl, options)
+  if (pages.length === 0) return ''
+  const requestedPage = options.pageNum ?? -1
+  return `${pages
+    .map((page, pageIndex) =>
+      requestedPage !== -1 && requestedPage !== pageIndex ? 'noRedraw' : page,
+    )
+    .join('[fenye]')}[fenye]`
 }

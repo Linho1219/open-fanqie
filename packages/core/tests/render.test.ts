@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 
-import { render } from '../src'
+import { render, renderSvgPages } from '../src'
 
 const compatibilityScore = readFileSync(new URL('./fixtures/test.jps', import.meta.url), 'utf8')
 
@@ -72,6 +72,27 @@ function graceReferences(svg: string): Array<GraceUse & { id: string }> {
 }
 
 describe('render', () => {
+  it('renders standalone SVG pages without the legacy response protocol', () => {
+    const diagnostics: string[] = []
+    const pages = renderSvgPages(`Q: 1 |\n[fenye]\nQ: 2 |`, {
+      customCode: '<text id="first">甲</text>[fenye]<text id="second">乙</text>',
+      onDiagnostics: (items) => diagnostics.push(...items.map(({ code }) => code)),
+    })
+
+    expect(pages).toHaveLength(2)
+    expect(pages.every((page) => page.startsWith('<svg') && page.endsWith('</svg>'))).toBe(true)
+    expect(pages.every((page) => page.includes('xmlns:xlink="http://www.w3.org/1999/xlink"'))).toBe(
+      true,
+    )
+    expect(pages.join('')).not.toContain('[fenye]')
+    expect(pages.join('')).not.toContain('noRedraw')
+    expect(pages[0]).toContain('<text id="first">甲</text>')
+    expect(pages[1]).toContain('<text id="second">乙</text>')
+    expect(diagnostics).toEqual([])
+    expect(renderSvgPages('')).toEqual([])
+    expect(render('Q: 1 |')).not.toMatch(/^<svg[^>]+xmlns:xlink/)
+  })
+
   it('matches legacy empty input and nonstandard page selection', () => {
     expect(render('')).toBe('')
     expect(render(' ')).toMatch(/^<svg/)

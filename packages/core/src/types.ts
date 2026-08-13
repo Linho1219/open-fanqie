@@ -193,3 +193,5 @@ export interface RenderOptions {
   pageNum?: number
   onDiagnostics?: (diagnostics: readonly Diagnostic[]) => void
 }
+
+export type SvgRenderOptions = Omit<RenderOptions, 'pageNum'>

@@ -1,5 +1,5 @@
 export { parse } from './parser'
-export { render } from './renderer'
+export { render, renderSvgPages } from './renderer'
 export { DEFAULT_PAGE_CONFIG } from './config'
 export type {
   Accidental,
@@ -25,6 +25,7 @@ export type {
   ScorePage,
   SourceLocation,
   SustainElement,
+  SvgRenderOptions,
   VoiceGroup,
 } from './types'
 
