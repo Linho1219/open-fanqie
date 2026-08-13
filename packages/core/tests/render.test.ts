@@ -5,6 +5,15 @@ import { render, renderSvgPages } from '../src'
 
 const compatibilityScore = readFileSync(new URL('./fixtures/test.jps', import.meta.url), 'utf8')
 
+function decodeXmlAttribute(value: string): string {
+  return value
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&amp;', '&')
+}
+
 function uses(svg: string, line: number): Array<{ x: number; code: string }> {
   const expression = new RegExp(
     `<use x="([^"]+)"[^>]+notepos="0_${line}_[^"]+"[^>]+code="([^"]+)"[^>]*>`,
@@ -12,7 +21,7 @@ function uses(svg: string, line: number): Array<{ x: number; code: string }> {
   )
   return [...svg.matchAll(expression)].map((match) => ({
     x: Number(match[1]),
-    code: match[2] ?? '',
+    code: decodeXmlAttribute(match[2] ?? ''),
   }))
 }
 
@@ -91,6 +100,14 @@ describe('render', () => {
     expect(diagnostics).toEqual([])
     expect(renderSvgPages('')).toEqual([])
     expect(render('Q: 1 |')).not.toMatch(/^<svg[^>]+xmlns:xlink/)
+  })
+
+  it('escapes DSL commands in standalone SVG code attributes', () => {
+    const [page] = renderSvgPages(`Q: 1&zkh |/&sbf`)
+
+    expect(page).toContain('code="1&amp;zkh"')
+    expect(page).toContain('code="|n&amp;sbf"')
+    expect(page).not.toMatch(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[\da-f]+;)/i)
   })
 
   it('matches legacy empty input and nonstandard page selection', () => {
@@ -214,8 +231,8 @@ Q: 1 |
   it('keeps barline annotations in code without displaying ordinary text', () => {
     const svg = render(`Q: 1 |"p:2 / 4" 2 |"备注" 3 |`)
 
-    expect(svg).toContain('code="|\'p:2/4\'"')
-    expect(svg).toContain('code="|\'备注\'"')
+    expect(svg).toContain('code="|&apos;p:2/4&apos;"')
+    expect(svg).toContain('code="|&apos;备注&apos;"')
     expect(svg).not.toContain('>备注</text>')
   })
 

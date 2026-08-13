@@ -491,7 +491,7 @@ function renderBarline(
   const code = synthetic ? '|w' : `${normalizedCodes[type]}${suffix}`
   if (type === 'hidden') {
     return [
-      `<use x="${formatNumber(x)}" y="${formatNumber(y)}" xlink:href="#xiaojiexian_none" notepos="${escapeXml(notepos)}" time="0" audio="" code="${code}" xmlns:xlink="http://www.w3.org/1999/xlink"></use>`,
+      `<use x="${formatNumber(x)}" y="${formatNumber(y)}" xlink:href="#xiaojiexian_none" notepos="${escapeXml(notepos)}" time="0" audio="" code="${escapeXml(code)}" xmlns:xlink="http://www.w3.org/1999/xlink"></use>`,
     ]
   }
   if (type === 'invisible') {

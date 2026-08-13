@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-import { parse, render } from '../src'
+import { parse, render, renderSvgPages } from '../src'
 import type { LegacyPageConfig, ScoreLine } from '../src'
 
 interface LegacyExample {
@@ -29,6 +29,18 @@ function renderExample(example: LegacyExample): string {
       ? undefined
       : (JSON.parse(example.page_config) as Partial<LegacyPageConfig>)
   return render(example.code, {
+    ...(pageConfig === undefined ? {} : { pageConfig }),
+    customCode:
+      example.custom_code === null || example.custom_code === 'null' ? '' : example.custom_code,
+  })
+}
+
+function renderExamplePages(example: LegacyExample): string[] {
+  const pageConfig =
+    example.page_config === null || example.page_config === 'null'
+      ? undefined
+      : (JSON.parse(example.page_config) as Partial<LegacyPageConfig>)
+  return renderSvgPages(example.code, {
     ...(pageConfig === undefined ? {} : { pageConfig }),
     customCode:
       example.custom_code === null || example.custom_code === 'null' ? '' : example.custom_code,
@@ -87,7 +99,7 @@ describe('bundled legacy examples', () => {
     expect(svg.match(/xlink:href="#ci_dakuohu_you"/g)).toHaveLength(2)
 
     const sbfBarX = Number(
-      svg.match(/<use x="([^"]+)"[^>]+notepos="0_3_22"[^>]+code="\|&sbf"/)?.[1],
+      svg.match(/<use x="([^"]+)"[^>]+notepos="0_3_22"[^>]+code="\|&amp;sbf"/)?.[1],
     )
     const nextNoteX = Number(svg.match(/<use x="([^"]+)"[^>]+notepos="0_3_23"/)?.[1])
     const voiceBraceX = Number(
@@ -124,5 +136,19 @@ describe('bundled legacy examples', () => {
     expect(defs).toContain('<path')
     expect(defs).not.toMatch(/<g id="lidu_[^"]+"[^>]*>[\s\S]*?<text/)
     expect(svg).toContain('<g id="custom_8ztEEB5hay"')
+  })
+
+  it.each([
+    ['37', 1],
+    ['63', 2],
+    ['61', 4],
+  ])('renders example %s with XML-safe standalone SVG entities', (id, pageCount) => {
+    const pages = renderExamplePages(loadExample(id))
+
+    expect(pages).toHaveLength(pageCount)
+    expect(pages.join('')).toContain('&amp;')
+    for (const page of pages) {
+      expect(page).not.toMatch(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[\da-f]+;)/i)
+    }
   })
 })

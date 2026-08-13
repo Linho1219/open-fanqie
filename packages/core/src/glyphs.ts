@@ -84,9 +84,7 @@ export function formatNumber(value: number): string {
 function attributes(values: Readonly<Record<string, string | number | undefined>>): string {
   return Object.entries(values)
     .filter((entry): entry is [string, string | number] => entry[1] !== undefined)
-    .map(
-      ([name, value]) => `${name}="${name === 'code' ? String(value) : escapeXml(String(value))}"`,
-    )
+    .map(([name, value]) => `${name}="${escapeXml(String(value))}"`)
     .join(' ')
 }
 
