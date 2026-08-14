@@ -218,6 +218,21 @@ Q: 1 |
     expect(svg).not.toContain('>抒情地</text>')
   })
 
+  it.each([
+    ['#C', 'bianyinfu_sheng', 'c'],
+    ['$B', 'bianyinfu_jiang', 'b'],
+    ['C#', 'bianyinfu_sheng', 'c'],
+    ['B$', 'bianyinfu_jiang', 'b'],
+  ])('renders accidental mode %s with legacy placement', (mode, accidental, letter) => {
+    const svg = render(`B: 标题\nD: ${mode}\nP: 4/4\nQ: 1 |`)
+
+    expect(svg).toContain(`x="125" y="176" xlink:href="#${accidental}"`)
+    expect(svg).toContain(
+      `x="125" y="176" xlink:href="#diaohao_zimu_${letter}" code="${mode}" data-diaohao="true"`,
+    )
+    expect(svg).toContain('x="135" y="176" xlink:href="#paihao_xian"')
+  })
+
   it('does not render metadata header fields without a B line', () => {
     const svg = render(`D: C\nP: 4/4\nJ: 80\nZ: 作者\nQ: 1 |`)
 

@@ -68,6 +68,13 @@ Q: 1 |
     expect(document.diagnostics.map(({ code }) => code)).toContain('invalid-meter')
   })
 
+  it.each(['#C', '$B', 'C#', 'B$'])('accepts accidental mode %s', (mode) => {
+    const document = parse(`D: ${mode}\nQ: 1 |`)
+
+    expect(document.metadata.mode).toBe(mode)
+    expect(document.diagnostics).toEqual([])
+  })
+
   it('preserves normalized barline annotation code', () => {
     const document = parse(`Q: 1 |"p:2 / 4" 2 |"foo bar" 3 |`)
     const barlines = document.pages[0]?.groups[0]?.voices[0]?.elements.filter(

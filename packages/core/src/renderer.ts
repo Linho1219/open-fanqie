@@ -92,20 +92,22 @@ function modeHeader(
   const output: string[] = []
   let x = config.marginLeft
   if (metadata.mode !== undefined) {
+    const letter = metadata.mode.match(/[A-G]/)?.[0]
+    const accidental = metadata.mode.match(/[#$]/)?.[0]
+    const modeX = x + (accidental === undefined ? 40 : 45)
     output.push(registry.use('diaohao_fu', x, y))
+    if (accidental !== undefined) {
+      output.push(
+        registry.use(accidental === '#' ? 'bianyinfu_sheng' : 'bianyinfu_jiang', modeX, y),
+      )
+    }
     output.push(
-      registry.use(`diaohao_zimu_${metadata.mode[0]?.toLowerCase()}`, x + 40, y, {
+      registry.use(`diaohao_zimu_${letter?.toLowerCase()}`, modeX, y, {
         code: metadata.mode,
         'data-diaohao': 'true',
       }),
     )
-    if (metadata.mode[1] === '#' || metadata.mode[1] === '$') {
-      output.push(
-        registry.use(metadata.mode[1] === '#' ? 'bianyinfu_sheng' : 'bianyinfu_jiang', x + 50, y),
-      )
-      x += 12
-    }
-    x += 50
+    x += accidental === undefined ? 50 : 55
   }
 
   metadata.meters.forEach((meter, index) => {

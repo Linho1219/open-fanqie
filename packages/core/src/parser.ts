@@ -943,7 +943,7 @@ function parseMetadata(
     return true
   }
   if (prefix === 'D') {
-    if (!/^[A-G][#$]?$/.test(value)) {
+    if (!/^(?:[A-G][#$]?|[#$][A-G])$/.test(value)) {
       report(context, 'invalid-mode', `Invalid mode '${value}'.`, 0, value.length, 'error')
     } else {
       metadata.mode = value
