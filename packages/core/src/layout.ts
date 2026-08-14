@@ -209,6 +209,12 @@ function beatTerminalWidth(items: AnalyzedItem[]): number {
   )
 }
 
+function beatBarlineTrailingWidth(items: AnalyzedItem[]): number {
+  const last = items[items.length - 1]
+  // A barline is a collision boundary for lyrics attached to the final note.
+  return beatTerminalWidth(items) + (last?.lyricOverflow ?? 0)
+}
+
 function analyzeLine(line: ScoreLine): AnalyzedLine {
   const measures: AnalyzedMeasure[] = []
   const inlineLayers: AnalyzedLine['inlineLayers'] = []
@@ -589,7 +595,7 @@ export function layoutVoiceGroup(
             0,
             ...alignmentAnalyses.flatMap(({ measures }) => {
               const items = measures[measureIndex]?.beats[lastBeat] ?? []
-              return items.length === 0 ? [] : [beatTerminalWidth(items)]
+              return items.length === 0 ? [] : [beatBarlineTrailingWidth(items)]
             }),
           )
     const hasInlineRightColumn = inlineVoicePlans.some(

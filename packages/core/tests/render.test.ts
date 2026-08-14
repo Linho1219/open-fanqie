@@ -644,6 +644,19 @@ Q: |/[+"1." 1 2 |]
     ])
   })
 
+  it('reserves overlong lyric width before a barline', () => {
+    const svg = render(`Q: 1 2 | 3 4 |\nC: 甲 多~个~字 丙 丁`)
+
+    expect(uses(svg, 1)).toEqual([
+      { x: 83, code: '1' },
+      { x: 120.5, code: '2' },
+      { x: 248.83333333333, code: '3' },
+      { x: 286.33333333333, code: '4' },
+      { x: 213.83333333333, code: '|' },
+      { x: 321.33333333333, code: '|' },
+    ])
+  })
+
   it('aligns and reserves space for temporary accompaniment and voices', () => {
     const svg = render(`
 Q: 1 2 {dsb 3 4} 5 6 |
