@@ -1,0 +1,5 @@
+<g id="customID" data-type="symbol">
+<rect fill="#ffff00" stroke-width="0" y="-5" x="-4.9" width="22.5" height="17.6" mask="true"/>
+<ellipse fill="#000000" cx="6.09723" cy="6.26666" rx="1.2" ry="1.2"/>
+<path stroke="#000000" fill="black" d="m0,7.46666c3.65834,-7.46666 8.53611,-7.46666 12.19445,0m0,0c-3.65834,-6.72 -8.53612,-6.72 -12.19445,0"/>
+</g>

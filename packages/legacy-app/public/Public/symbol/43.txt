@@ -1,0 +1,4 @@
+<g id="customID" data-type="symbol">
+<rect fill="#ffff00" stroke-width="0" y="-4.79968" x="-5.03829" width="23.40673" height="19.9056" mask="true"/>
+<path stroke="#1b1b1b" fill="none" stroke-width="1.2" stroke-linecap="round" d="m11.75544,0.61192c0,0 -7.64941,0.56947 -11.13521,8.88383"/>
+</g>

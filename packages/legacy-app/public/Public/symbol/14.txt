@@ -1,0 +1,6 @@
+<g id="customID" data-type="symbol">
+<rect mask="true" height="21.98875" width="18.37707" x="-5" y="-5" stroke-width="0" fill="#ffff00"/>
+<line stroke="#000000" y2="9.12406" x2="3.72967" y1="11.54809" x1="6.16687" fill="none"/>
+<line stroke="#000000" y2="9.13619" x2="8.1082" y1="11.60822" x1="5.62273" fill="none"/>
+<path stroke="#000000" d="m5.74365,11.06703c0,0 1.51149,-7.99766 -5.50182,-10.58336" fill="none"/>
+</g>

@@ -1,0 +1,4 @@
+<g id="customID" data-type="symbol">
+<rect fill="#ffff00" stroke-width="0" y="-4.8" x="-5.1" width="11.5" height="38.7" mask="true"/>
+<rect fill="#000000" x="0" y="0" width="1.5" height="29"/>
+ </g>

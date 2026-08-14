@@ -1,0 +1,4 @@
+<g id="customID" data-type="symbol">
+<rect mask="true" height="13.7" width="13.6" x="-4.9" y="-5" stroke-width="0" fill="#ffff00"/>
+<ellipse ry="1.9" rx="1.9" cy="1.9" cx="1.9" stroke-opacity="0" stroke-width="0" fill="#000000" stroke="#000000"/>
+ </g>

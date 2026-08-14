@@ -1,0 +1,6 @@
+<g id="customID" data-type="symbol">
+<rect mask="true" height="21.98875" width="19.10259" x="-5" y="-5" stroke-width="0" fill="#ffff00" id="svg_1"/>
+<line y2="2.79996" x2="3.66921" y1="0.36276" x1="6.10641" stroke="#000000" fill="none"/>
+<line y2="2.78776" x2="8.04774" y1="0.3023" x1="5.56227" stroke="#000000" fill="none"/>
+<path d="m5.68319,0.84643c0,0 1.51149,8.04112 -5.50182,10.64087" stroke="#000000" fill="none"/>
+</g>
