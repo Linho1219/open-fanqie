@@ -251,6 +251,15 @@ Q: 1 |
     expect(svg).not.toContain('>备注</text>')
   })
 
+  it('renders consecutive note annotations as one interlinear label', () => {
+    const svg = render(`Q: 1"吉他solo""转E调" 2 |`)
+
+    expect(svg).toContain(
+      'x="77" y="106" dy="4.026" fill="#303030" font-size="12" font-family="Microsoft YaHei" xml:space="preserve">吉他solo转E调</text>',
+    )
+    expect(svg).not.toContain('>转E调</text>')
+  })
+
   it('matches the observed legacy spacing constants', () => {
     const svg = render(`
 Q: 1 2 3 4 |

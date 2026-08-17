@@ -683,7 +683,7 @@ function parseMusicLine(
       const attachIndex = lastAttachableIndex(elements)
       const attachable = attachIndex === undefined ? undefined : elements[attachIndex]
       if (attachable?.kind === 'note') {
-        attachable.annotation = value
+        attachable.annotation = `${attachable.annotation ?? ''}${value}`
       } else if (attachable?.kind === 'barline') {
         const meter = parseMeter(value, false)
         if (value.trimStart().startsWith('p:') && meter !== undefined) {

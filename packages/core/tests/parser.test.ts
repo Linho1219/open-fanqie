@@ -89,6 +89,14 @@ Q: 1 |
     expect(document.diagnostics).toEqual([])
   })
 
+  it('concatenates consecutive note annotations', () => {
+    const document = parse(`Q: 1"吉他solo""转E调" 2 |`)
+    const note = document.pages[0]?.groups[0]?.voices[0]?.elements[0]
+
+    expect(note).toMatchObject({ kind: 'note', annotation: '吉他solo转E调', code: '1' })
+    expect(document.diagnostics).toEqual([])
+  })
+
   it('parses notes, barlines, commands, and source code', () => {
     const document = parse(`Q: 1'#//..&yc 8 9, 0 2$ 3= - |: :| :|: || ||/ |/ |*`)
     const elements = document.pages[0]?.groups[0]?.voices[0]?.elements ?? []
