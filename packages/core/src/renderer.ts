@@ -371,6 +371,22 @@ function renderInlineOrnaments(
   })
 }
 
+function renderInterlinearAnnotation(
+  value: string,
+  x: number,
+  y: number,
+  config: ResolvedPageConfig,
+  baselineOffset = 0,
+): string {
+  return text(value, x - 6, y - 24, {
+    font: config.lyricFont,
+    size: 12,
+    fill: '#303030',
+    dy: 0.3355 * 12 + baselineOffset,
+    extra: { 'xml:space': 'preserve' },
+  })
+}
+
 function renderNote(
   note: NoteElement,
   x: number,
@@ -425,15 +441,7 @@ function renderNote(
       output.push(...renderGrace(note.graceAfter, x, y, false, nextGraceId('hy'), registry))
     }
     if (note.annotation !== undefined) {
-      output.push(
-        text(note.annotation, x - 6, y - 24, {
-          font: config.lyricFont,
-          size: 12,
-          fill: '#303030',
-          dy: 0.3355 * 12,
-          extra: { 'xml:space': 'preserve' },
-        }),
-      )
+      output.push(renderInterlinearAnnotation(note.annotation, x, y, config))
     }
     output.push(...renderOrnaments(note.ornaments, x, y, registry, ornamentContext))
   }
@@ -445,10 +453,11 @@ function renderSustain(
   x: number,
   y: number,
   notepos: string,
+  config: ResolvedPageConfig,
   registry: GlyphRegistry,
   timeOverride?: number,
 ): string[] {
-  return [
+  const output = [
     registry.use('yanyinfu', x, y, {
       time: formatNumber(timeOverride ?? 1),
       audio: '',
@@ -457,6 +466,10 @@ function renderSustain(
     }),
     ...renderOrnaments(sustain.ornaments, x, y, registry),
   ]
+  if (sustain.annotation !== undefined) {
+    output.push(renderInterlinearAnnotation(sustain.annotation, x, y, config))
+  }
+  return output
 }
 
 function renderBarline(
@@ -877,12 +890,18 @@ function renderInlineLayer(
           const id =
             element.pitch === 9 ? 'shuzi_x' : `shuzi_${config.numberStyle}_bian_${element.pitch}`
           output.push(registry.use(id, positioned.x, y))
+          if (element.annotation !== undefined) {
+            output.push(renderInterlinearAnnotation(element.annotation, positioned.x, y, config, 2))
+          }
           output.push(...renderInlineOrnaments(element.ornaments, positioned.x, y, registry))
         }
       } else if (layer.role === 'voice') {
-        output.push(...renderSustain(element, positioned.x, y, `${pageIndex}__`, registry))
+        output.push(...renderSustain(element, positioned.x, y, `${pageIndex}__`, config, registry))
       } else {
         output.push(registry.use('yanyinfu', positioned.x, y))
+        if (element.annotation !== undefined) {
+          output.push(renderInterlinearAnnotation(element.annotation, positioned.x, y, config, 2))
+        }
       }
     })
     layout.barlines.forEach((barline, index) => {
@@ -990,6 +1009,7 @@ function renderLine(
           positioned.x,
           elementY,
           notepos,
+          config,
           registry,
           timeOverride,
         ),

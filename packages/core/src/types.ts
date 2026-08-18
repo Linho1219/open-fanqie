@@ -61,6 +61,7 @@ export interface SustainElement {
   kind: 'sustain'
   duration: 4
   ornaments: Ornament[]
+  annotation?: string
   code: string
   source: SourceLocation
 }

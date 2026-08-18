@@ -682,7 +682,7 @@ function parseMusicLine(
         .replaceAll('_', ' ')
       const attachIndex = lastAttachableIndex(elements)
       const attachable = attachIndex === undefined ? undefined : elements[attachIndex]
-      if (attachable?.kind === 'note') {
+      if (attachable?.kind === 'note' || attachable?.kind === 'sustain') {
         attachable.annotation = `${attachable.annotation ?? ''}${value}`
       } else if (attachable?.kind === 'barline') {
         const meter = parseMeter(value, false)
@@ -694,7 +694,7 @@ function parseMusicLine(
         report(
           context,
           'orphan-annotation',
-          'Annotation must follow a note or barline.',
+          'Annotation must follow a note, sustain, or barline.',
           cursor,
           end - cursor + 1,
         )

@@ -260,6 +260,21 @@ Q: 1 |
     expect(svg).not.toContain('>转E调</text>')
   })
 
+  it('renders annotations on sustains and inline accompaniment notes', () => {
+    const sustain = render(`Q: 6 -"转F调" |`)
+    expect(sustain).toContain(
+      'x="114.5" y="106" dy="4.026" fill="#303030" font-size="12" font-family="Microsoft YaHei" xml:space="preserve">转F调</text>',
+    )
+
+    const accompaniment = render(`Q: 1 {bz 2/"键盘"} 3 |`)
+    expect(accompaniment).toContain(
+      'x="114.5" y="106" dy="6.026" fill="#303030" font-size="12" font-family="Microsoft YaHei" xml:space="preserve">键盘</text>',
+    )
+
+    const terminalAccompaniment = render(`Q: 1 {bz 0 0 6/ 2/ 2// 3// 5/"键盘"} 6 |`)
+    expect(terminalAccompaniment).toContain('>键盘</text>')
+  })
+
   it('matches the observed legacy spacing constants', () => {
     const svg = render(`
 Q: 1 2 3 4 |

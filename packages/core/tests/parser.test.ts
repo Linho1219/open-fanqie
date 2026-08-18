@@ -97,6 +97,18 @@ Q: 1 |
     expect(document.diagnostics).toEqual([])
   })
 
+  it('attaches annotations to sustains and inline accompaniment notes', () => {
+    const document = parse(`Q: 1 -"转F调" {bz 2/"键盘"} 3 |`)
+    const elements = document.pages[0]?.groups[0]?.voices[0]?.elements ?? []
+
+    expect(elements[1]).toMatchObject({ kind: 'sustain', annotation: '转F调', code: '-' })
+    expect(elements[2]).toMatchObject({
+      kind: 'inline-layer',
+      elements: [{ kind: 'note', annotation: '键盘', code: '2/' }],
+    })
+    expect(document.diagnostics).toEqual([])
+  })
+
   it('parses notes, barlines, commands, and source code', () => {
     const document = parse(`Q: 1'#//..&yc 8 9, 0 2$ 3= - |: :| :|: || ||/ |/ |*`)
     const elements = document.pages[0]?.groups[0]?.voices[0]?.elements ?? []
